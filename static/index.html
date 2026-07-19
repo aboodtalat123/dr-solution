@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Dr. Solution. - مساحة أكاديمية لشرح الكتب والأبحاث والمحاضرات والمستندات الجامعية."
+    />
+    <meta name="theme-color" content="#f7f8f6" />
+    <title>Dr. Solution. | الدراسة الأكاديمية بوضوح</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/app.css?v=3.1.0" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="topbar__start">
+          <button class="icon-button mobile-only" id="menuButton" type="button" aria-label="فتح القائمة" title="القائمة">
+            <i data-lucide="menu"></i>
+          </button>
+          <a class="brand" href="/" aria-label="Dr. Solution. الرئيسية">
+            <span class="brand__mark" aria-hidden="true">
+              <span>Dr</span>
+              <b></b>
+            </span>
+            <span class="brand__text" dir="ltr">
+              <strong>Dr. Solution.</strong>
+              <small>رفيقك الأكاديمي</small>
+            </span>
+          </a>
+        </div>
+
+        <div class="topbar__end">
+          <span class="connection" id="connectionState">
+            <span class="connection__dot"></span>
+            <span>جاري الاتصال</span>
+          </span>
+          <button class="icon-button" id="sidebarToggle" type="button" aria-label="إخفاء الشريط" title="إخفاء الشريط الجانبي">
+            <i data-lucide="panel-right-close"></i>
+          </button>
+          <button class="icon-button" id="themeButton" type="button" aria-label="تبديل المظهر" title="تبديل المظهر">
+            <i data-lucide="moon"></i>
+          </button>
+        </div>
+      </header>
+
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar__primary">
+          <button class="new-analysis" id="newAnalysisButton" type="button">
+            <i data-lucide="plus"></i>
+            <span>ملف جديد</span>
+          </button>
+
+          <nav class="sidebar__nav" aria-label="التنقل">
+            <button class="nav-item is-active" type="button" data-view="workspace">
+              <i data-lucide="library-big"></i>
+              <span>مساحة الدراسة</span>
+            </button>
+            <button class="nav-item" type="button" data-view="history">
+              <i data-lucide="history"></i>
+              <span>السجل</span>
+              <span class="nav-item__count" id="historyCount">0</span>
+            </button>
+          </nav>
+
+          <div class="history-block" id="historyBlock">
+            <div class="section-label">
+              <span>الأخيرة</span>
+              <button class="text-button" id="clearHistoryButton" type="button">مسح</button>
+            </div>
+            <div class="history-list" id="historyList"></div>
+          </div>
+        </div>
+
+        <div class="sidebar__footer">
+          <div class="privacy-note">
+            <i data-lucide="shield-check"></i>
+            <div>
+              <strong>معالجة آمنة</strong>
+              <span>لا تُحفظ الملفات على الخادم</span>
+            </div>
+          </div>
+          <span class="version" id="versionLabel" dir="ltr">Dr. Solution.</span>
+        </div>
+      </aside>
+
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+      <main class="main">
+        <section class="workspace view is-active" id="workspaceView">
+          <div class="workspace__header">
+            <div>
+              <span class="eyebrow">مساحة أكاديمية جديدة</span>
+              <h1>حوّل ملفك الأكاديمي إلى شرح متكامل</h1>
+            </div>
+            <div class="file-support" aria-label="الأنواع المدعومة">
+              <span>PDF</span>
+              <span>PNG</span>
+              <span>JPG</span>
+              <span>WEBP</span>
+            </div>
+          </div>
+
+          <form class="analysis-form" id="analysisForm">
+            <div class="settings-bar">
+              <label class="control">
+                <span class="control__label">
+                  <i data-lucide="library"></i>
+                  نوع المادة
+                </span>
+                <select id="contentKindSelect" name="content_kind" aria-label="نوع المادة الأكاديمية">
+                  <option value="auto">تحديد تلقائي</option>
+                  <option value="lecture">محاضرة أو شابتر</option>
+                  <option value="research">بحث علمي</option>
+                  <option value="book">كتاب أو فصل</option>
+                  <option value="university_document">مستند جامعي</option>
+                </select>
+              </label>
+
+              <label class="control">
+                <span class="control__label">
+                  <i data-lucide="brain-circuit"></i>
+                  المحرك
+                </span>
+                <select id="providerSelect" name="provider" aria-label="محرك الذكاء الاصطناعي">
+                  <option value="gemini">Gemini 3.1 Flash-Lite</option>
+                  <option value="deepseek">DeepSeek Chat</option>
+                </select>
+              </label>
+
+              <label class="control">
+                <span class="control__label">
+                  <i data-lucide="languages"></i>
+                  لغة النتيجة
+                </span>
+                <select id="languageSelect" name="target_language">
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                  <option value="tr">Türkçe</option>
+                </select>
+              </label>
+
+              <fieldset class="control depth-control">
+                <legend class="control__label">
+                  <i data-lucide="layers-3"></i>
+                  مستوى الشرح
+                </legend>
+                <div class="segments" role="radiogroup" aria-label="مستوى الشرح">
+                  <label>
+                    <input type="radio" name="depth" value="focused" />
+                    <span>مركّز</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="depth" value="balanced" checked />
+                    <span>متوازن</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="depth" value="deep" />
+                    <span>عميق</span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+
+            <section class="api-key-panel" aria-labelledby="apiKeyTitle">
+              <div class="api-key-panel__heading">
+                <span class="api-key-panel__icon"><i data-lucide="key-round"></i></span>
+                <div>
+                  <strong id="apiKeyTitle">مفتاح المحرك</strong>
+                  <span>يُستخدم لهذا الطلب فقط ولا يتم حفظه.</span>
+                </div>
+              </div>
+              <div class="api-key-panel__actions">
+                <div class="api-key-control">
+                  <input
+                    id="apiKeyInput"
+                    type="password"
+                    name="api_key"
+                    placeholder="ألصق مفتاح Gemini"
+                    aria-label="مفتاح API للمحرك المحدد"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                  <button
+                    class="api-key-toggle"
+                    id="toggleApiKeyButton"
+                    type="button"
+                    aria-label="إظهار المفتاح"
+                    title="إظهار المفتاح"
+                  >
+                    <i data-lucide="eye"></i>
+                  </button>
+                </div>
+                <label class="save-key-toggle">
+                  <input id="saveApiKey" type="checkbox" />
+                  <span><i data-lucide="key-round"></i> حفظ المفتاح</span>
+                </label>
+                <a
+                  class="key-provider-link"
+                  id="providerKeyLink"
+                  href="https://aistudio.google.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span>احصل على مفتاح Gemini</span>
+                  <i data-lucide="external-link"></i>
+                </a>
+              </div>
+            </section>
+
+            <section class="question-config" id="questionConfig">
+              <div class="question-config__heading">
+                <span class="question-config__icon"><i data-lucide="badge-help"></i></span>
+                <div>
+                  <strong>اختبار بعد الشرح</strong>
+                  <span>حدّد شكل الأسئلة قبل بدء التحليل</span>
+                </div>
+                <label class="switch" title="تشغيل أو إيقاف الأسئلة">
+                  <input id="questionsEnabled" type="checkbox" checked />
+                  <span aria-hidden="true"></span>
+                  <b>مفعّل</b>
+                </label>
+              </div>
+
+              <div class="question-options" id="questionOptions">
+                <fieldset class="option-group question-types">
+                  <legend>نوع الأسئلة</legend>
+                  <label><input type="checkbox" name="questionType" value="multiple_choice" checked /><span><i data-lucide="list-checks"></i>اختيار متعدد</span></label>
+                  <label><input type="checkbox" name="questionType" value="true_false" checked /><span><i data-lucide="toggle-left"></i>صح أو خطأ</span></label>
+                  <label><input type="checkbox" name="questionType" value="short_answer" /><span><i data-lucide="text-cursor-input"></i>إجابة قصيرة</span></label>
+                  <label><input type="checkbox" name="questionType" value="essay" /><span><i data-lucide="notebook-pen"></i>مقالي</span></label>
+                </fieldset>
+
+                <fieldset class="option-group">
+                  <legend>عدد الأسئلة</legend>
+                  <div class="stepper">
+                    <button id="questionMinus" type="button" aria-label="تقليل عدد الأسئلة"><i data-lucide="minus"></i></button>
+                    <input id="questionCount" type="number" min="1" max="20" value="8" aria-label="عدد الأسئلة" />
+                    <button id="questionPlus" type="button" aria-label="زيادة عدد الأسئلة"><i data-lucide="plus"></i></button>
+                  </div>
+                </fieldset>
+
+                <fieldset class="option-group difficulty-group">
+                  <legend>الصعوبة</legend>
+                  <div class="segments" role="radiogroup" aria-label="صعوبة الأسئلة">
+                    <label><input type="radio" name="questionDifficulty" value="easy" /><span>سهلة</span></label>
+                    <label><input type="radio" name="questionDifficulty" value="mixed" checked /><span>متدرجة</span></label>
+                    <label><input type="radio" name="questionDifficulty" value="challenging" /><span>متقدمة</span></label>
+                  </div>
+                </fieldset>
+                <fieldset class="option-group correction-mode">
+                  <legend>طريقة التصحيح</legend>
+                  <div class="segments" role="radiogroup" aria-label="طريقة التصحيح">
+                    <label><input type="radio" name="correctionMode" value="immediate" checked /><span><i data-lucide="zap"></i> فوري</span></label>
+                    <label><input type="radio" name="correctionMode" value="end" /><span><i data-lucide="clock"></i> بنهاية الاختبار</span></label>
+                  </div>
+                </fieldset>
+              </div>
+            </section>
+
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="اختيار ملف">
+              <input
+                id="fileInput"
+                name="file"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+                hidden
+              />
+              <div class="dropzone__visual" aria-hidden="true">
+                <div class="document-stack">
+                  <span class="document-sheet sheet-back"></span>
+                  <span class="document-sheet sheet-front">
+                    <i data-lucide="scan-line"></i>
+                    <b></b><b></b><b></b>
+                  </span>
+                  <span class="document-badge"><i data-lucide="arrow-up"></i></span>
+                </div>
+              </div>
+              <div class="dropzone__copy">
+                <strong>ضع الملف الأكاديمي هنا</strong>
+                <span>أو <u>اختره من الجهاز</u></span>
+                <small>حتى 15 MB</small>
+              </div>
+            </div>
+
+            <div class="selected-file" id="selectedFile" hidden>
+              <div class="file-preview" id="filePreview">
+                <i data-lucide="file-text"></i>
+              </div>
+              <div class="file-info">
+                <strong id="fileName">-</strong>
+                <span id="fileMeta">-</span>
+              </div>
+              <span class="ready-badge"><i data-lucide="check"></i> جاهز</span>
+              <button class="icon-button" id="removeFileButton" type="button" aria-label="إزالة الملف" title="إزالة الملف">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+
+            <div class="form-footer">
+              <span class="form-hint" id="providerHint">
+                <i data-lucide="image"></i>
+                يدعم النص والصور
+              </span>
+              <button class="primary-button" id="analyzeButton" type="submit" disabled>
+                <i data-lucide="sparkles"></i>
+                <span>ابدأ التحليل</span>
+                <i data-lucide="arrow-left"></i>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="processing view" id="processingView" aria-live="polite">
+          <div class="processing__content">
+            <div class="processing-orbit" aria-hidden="true">
+              <span class="orbit orbit-one"></span>
+              <span class="orbit orbit-two"></span>
+              <div class="processing-icon"><i data-lucide="scan-text"></i></div>
+            </div>
+            <span class="eyebrow">قيد المعالجة</span>
+            <h2 id="processingTitle">نقرأ المستند</h2>
+            <p id="processingFileName">-</p>
+            <div class="progress-track"><span id="progressBar"></span></div>
+            <div class="progress-percent" id="progressPercent">0%</div>
+            <ol class="processing-steps" id="processingSteps">
+              <li class="is-active"><i data-lucide="loader-circle"></i><span>تحويل الصفحات</span></li>
+              <li><i data-lucide="circle"></i><span>شرح السلايدات</span></li>
+              <li><i data-lucide="circle"></i><span>بناء الخلاصة</span></li>
+              <li><i data-lucide="circle"></i><span>تجهيز الاختبار</span></li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="results view" id="resultsView">
+          <header class="results__header">
+            <div class="results__title">
+              <button class="icon-button" id="backButton" type="button" aria-label="العودة" title="تحليل جديد">
+                <i data-lucide="arrow-right"></i>
+              </button>
+              <div>
+                <span class="eyebrow">اكتمل التحليل</span>
+                <h1 id="resultTitle">نتيجة المستند</h1>
+                <div class="result-meta" id="resultMeta"></div>
+              </div>
+            </div>
+            <div class="results__actions">
+              <button class="secondary-button" id="copyButton" type="button">
+                <i data-lucide="copy"></i><span>نسخ</span>
+              </button>
+              <div class="export-swatches" id="exportSwatches" aria-label="لون صفحة التصدير">
+                <button class="swatch swatch--emerald is-active" type="button" data-export-theme="emerald" aria-label="زمردي" title="زمردي"></button>
+                <button class="swatch swatch--blue" type="button" data-export-theme="blue" aria-label="أزرق" title="أزرق"></button>
+                <button class="swatch swatch--coral" type="button" data-export-theme="coral" aria-label="مرجاني" title="مرجاني"></button>
+              </div>
+              <button class="secondary-button" id="exportButton" type="button">
+                <i data-lucide="file-code-2"></i><span>تنزيل HTML</span>
+              </button>
+            </div>
+          </header>
+
+          <nav class="tabs" id="resultTabs" aria-label="أقسام النتيجة">
+            <button class="tab is-active" type="button" data-tab="slides"><i data-lucide="panels-top-left"></i><span>السلايدات والشرح</span><b id="slideCount">0</b></button>
+            <button class="tab" type="button" data-tab="chapter"><i data-lucide="book-open-check"></i><span>خلاصة المادة</span></button>
+            <button class="tab" type="button" data-tab="quiz"><i data-lucide="clipboard-check"></i><span>الاختبار</span><b id="questionCountBadge">0</b></button>
+          </nav>
+
+          <div class="result-panels">
+            <article class="result-panel is-active" data-panel="slides" id="slidesPanel"></article>
+            <article class="result-panel" data-panel="chapter" id="chapterPanel"></article>
+            <article class="result-panel" data-panel="quiz" id="quizPanel"></article>
+          </div>
+        </section>
+
+        <section class="history-view view" id="historyView">
+          <div class="history-view__header">
+            <div>
+              <span class="eyebrow">محفوظ محلياً</span>
+              <h1>سجل التحليلات</h1>
+            </div>
+            <button class="secondary-button" id="historyNewButton" type="button"><i data-lucide="plus"></i><span>تحليل جديد</span></button>
+          </div>
+          <div class="history-grid" id="historyGrid"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <i data-lucide="circle-check"></i>
+      <span></span>
+    </div>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="/static/js/exporter.js?v=3.1.0" defer></script>
+    <script src="/static/js/app.js?v=3.1.0" defer></script>
+    <script src="/static/js/chat-widget.js?v=3.1.0" defer></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+[project]
+name = "dr-solution"
+version = "1.0.0"
+description = "AI-powered document translation, explanation, and visual analysis."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

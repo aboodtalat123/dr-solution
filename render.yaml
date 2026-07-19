@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: dr-solution
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ENVIRONMENT
+        value: production
+      - key: APP_VERSION
+        value: 3.0.0
+      - key: REQUIRE_USER_API_KEY
+        value: true
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
