@@ -46,6 +46,8 @@ def create_app() -> FastAPI:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        elif request.url.path in ("/", "/about", "/privacy", "/robots.txt", "/sitemap.xml"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
         elif request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
