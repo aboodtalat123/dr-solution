@@ -58,9 +58,29 @@ def create_app() -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    @application.get("/robots.txt", include_in_schema=False)
+    async def robots() -> FileResponse:
+        return FileResponse(STATIC_DIR / "robots.txt")
+
+    @application.get("/google55b1a35237dc5a3c.html", include_in_schema=False)
+    async def google_verify() -> FileResponse:
+        return FileResponse(STATIC_DIR / "google55b1a35237dc5a3c.html")
+
+    @application.get("/sitemap.xml", include_in_schema=False)
+    async def sitemap() -> FileResponse:
+        return FileResponse(STATIC_DIR / "sitemap.xml")
+
+    @application.get("/about", include_in_schema=False)
+    async def about() -> FileResponse:
+        return FileResponse(STATIC_DIR / "about.html")
+
+    @application.get("/privacy", include_in_schema=False)
+    async def privacy() -> FileResponse:
+        return FileResponse(STATIC_DIR / "privacy.html")
+
     @application.get("/favicon.ico", include_in_schema=False)
-    async def favicon() -> Response:
-        return Response(status_code=204)
+    async def favicon() -> FileResponse:
+        return FileResponse(STATIC_DIR / "favicon.svg")
 
     return application
 
