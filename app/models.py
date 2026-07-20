@@ -111,6 +111,7 @@ class VideoSegmentAnalysis(BaseModel):
     start_sec: float
     end_sec: float
     title: str = ""
+    transcript_text: str = ""
     arabic_explanation: str = ""
     translation: str = ""
     key_points: list[str] = Field(default_factory=list)
@@ -122,6 +123,9 @@ class VideoSegmentAnalysis(BaseModel):
 class VideoAnalysisResult(BaseModel):
     video_title: str = ""
     duration_sec: float = 0
+    transcript_source: str = ""
+    segmentation_mode: str = ""
+    warnings: list[str] = Field(default_factory=list)
     segments: list[VideoSegmentAnalysis] = Field(default_factory=list)
     overall_summary: str = ""
     learning_objectives: list[str] = Field(default_factory=list)

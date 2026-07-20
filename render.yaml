@@ -13,8 +13,20 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: APP_VERSION
-        value: 3.0.0
+        value: 3.2.0
       - key: REQUIRE_USER_API_KEY
         value: true
       - key: GEMINI_MODEL
         value: gemini-3.1-flash-lite
+      - key: VIDEO_MAX_SEGMENTS
+        value: 12
+      - key: VIDEO_MAX_PLAYLIST_ITEMS
+        value: 3
+      - key: VIDEO_ENABLE_SCENE_DETECTION
+        value: true
+      - key: VIDEO_ENABLE_WHISPER
+        value: true
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: WHISPER_COMPUTE_TYPE
+        value: int8

@@ -971,7 +971,7 @@ elements.clearHistoryButton.addEventListener("click", async () => {
   showToast("تم مسح السجل");
 });
 
-/* ── Video Goals Mode ── */
+/* ── Video Analysis Mode ── */
 const videoState = { result: null };
 
 const videoEls = {
@@ -1005,38 +1005,96 @@ videoEls.modeTabs.forEach((tab) => {
   tab.addEventListener("click", () => switchMode(tab.dataset.mode));
 });
 
+function formatVideoTime(seconds = 0) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    : `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function transcriptSourceLabel(source) {
+  if (source === "youtube_captions") return "ترجمة YouTube";
+  if (source === "whisper") return "Whisper محلي";
+  return "تحليل بصري فقط";
+}
+
+function segmentationModeLabel(mode) {
+  return mode === "scene_detection" ? "تغيّر السلايدات" : "تقطيع زمني احتياطي";
+}
+
+function renderVideoSegment(segment) {
+  const frame = String(segment.frame_data_url || "");
+  const safeFrame = frame.startsWith("data:image/") ? frame : "";
+  const points = segment.key_points || [];
+  const terms = segment.technical_terms || [];
+  return `<article class="video-segment-card">
+    <header class="video-segment-card__header">
+      <span>المقطع ${segment.index}</span>
+      <h3>${escapeHTML(segment.title || `مقطع ${segment.index}`)}</h3>
+      <time>${formatVideoTime(segment.start_sec)} - ${formatVideoTime(segment.end_sec)}</time>
+    </header>
+    <div class="video-segment-card__body">
+      <div class="video-segment-frame">
+        ${safeFrame ? `<img src="${safeFrame}" alt="إطار المقطع ${segment.index}">` : '<i data-lucide="image-off"></i>'}
+      </div>
+      <div class="video-segment-explanation">
+        <p>${richText(segment.arabic_explanation || segment.segment_summary || "لا يتوفر شرح لهذا المقطع.")}</p>
+        ${segment.translation ? `<div class="video-translation"><strong>الترجمة</strong><p>${richText(segment.translation)}</p></div>` : ""}
+      </div>
+    </div>
+    ${points.length ? `<ul class="video-key-points">${points.map((point) => `<li>${escapeHTML(point)}</li>`).join("")}</ul>` : ""}
+    ${terms.length ? `<div class="video-terms">${terms.map((term) => `<span><b>${escapeHTML(term.term)}</b>${escapeHTML(term.arabic_equivalent || term.explanation || "")}</span>`).join("")}</div>` : ""}
+    ${segment.transcript_text ? `<details class="video-transcript"><summary>النص المنطوق في هذا المقطع</summary><p>${richText(segment.transcript_text)}</p></details>` : ""}
+  </article>`;
+}
+
 function renderVideoResults(data) {
-  const goals = data.results || [];
-  const totalVideos = data.total_videos || 0;
-  const totalObj = data.total_objectives || 0;
-  videoEls.title.textContent = `${totalObj} هدف من ${totalVideos} فيديو`;
+  const results = data.results || [];
+  const validResults = results.filter((item) => !item.error);
+  const totalSegments = validResults.reduce((sum, item) => sum + (item.segments || []).length, 0);
+  const totalObjectives = validResults.reduce((sum, item) => sum + (item.learning_objectives || []).length, 0);
+  videoEls.title.textContent = validResults.length === 1
+    ? validResults[0].video_title
+    : `تحليل ${validResults.length} فيديو`;
   videoEls.meta.innerHTML = [
-    `<span><i data-lucide="cpu"></i>${escapeHTML(data.provider || "gemini")}</span>`,
-    `<span><i data-lucide="clock"></i>الثانية ${data.second}</span>`,
-    `<span><i data-lucide="target"></i>${totalObj} هدف</span>`,
-    `<span><i data-lucide="video"></i>${totalVideos} فيديو</span>`,
+    `<span><i data-lucide="video"></i>${results.length} فيديو</span>`,
+    `<span><i data-lucide="panels-top-left"></i>${totalSegments} مقطع</span>`,
+    `<span><i data-lucide="target"></i>${totalObjectives} هدف</span>`,
   ].join("");
 
-  const statsHtml = `
-    <div class="video-goal-stats">
-      <div class="video-goal-stat"><strong>${totalVideos}</strong><span>فيديو</span></div>
-      <div class="video-goal-stat"><strong>${totalObj}</strong><span>هدف تعليمي</span></div>
-    </div>`;
+  const statsHtml = `<div class="video-goal-stats">
+    <div class="video-goal-stat"><strong>${results.length}</strong><span>فيديو</span></div>
+    <div class="video-goal-stat"><strong>${totalSegments}</strong><span>مقطع مشروح</span></div>
+    <div class="video-goal-stat"><strong>${totalObjectives}</strong><span>هدف تعلم</span></div>
+  </div>`;
 
-  const cardsHtml = goals.map((item) => {
-    const objectives = item.objectives || [];
-    const hasError = item.error;
-    return `<div class="video-goal-card">
-      <div class="video-goal-card__header">
-        <h3>${escapeHTML(item.video_title)}</h3>
-        <small>${item.timestamp_seconds}ث · ${objectives.length} هدف</small>
+  const resultsHtml = results.map((item) => {
+    if (item.error) {
+      return `<div class="video-goal-error"><i data-lucide="circle-alert"></i><strong>${escapeHTML(item.video_title || "فيديو")}</strong><span>${escapeHTML(item.error)}</span></div>`;
+    }
+    const warnings = item.warnings || [];
+    const objectives = item.learning_objectives || [];
+    return `<section class="video-analysis-result">
+      <header class="video-analysis-header">
+        <div><span class="eyebrow">${transcriptSourceLabel(item.transcript_source)}</span><h2>${escapeHTML(item.video_title)}</h2></div>
+        <div class="video-analysis-meta">
+          <span><i data-lucide="clock-3"></i>${formatVideoTime(item.duration_sec)}</span>
+          <span><i data-lucide="scan-line"></i>${segmentationModeLabel(item.segmentation_mode)}</span>
+        </div>
+      </header>
+      ${warnings.length ? `<div class="video-warnings">${warnings.map((warning) => `<p><i data-lucide="info"></i>${escapeHTML(warning)}</p>`).join("")}</div>` : ""}
+      <div class="video-overview">
+        <div><strong>الخلاصة العامة</strong><p>${richText(item.overall_summary || "تُبنى الخلاصة من المقاطع التي نجح تحليلها.")}</p></div>
+        <div><strong>أهداف التعلم</strong>${objectives.length ? `<ul>${objectives.map((objective) => `<li>${escapeHTML(objective)}</li>`).join("")}</ul>` : '<p class="muted">لا تتوفر أهداف بعد.</p>'}</div>
       </div>
-      ${hasError ? `<div class="video-goal-error"><i data-lucide="alert-circle"></i> ${escapeHTML(item.error)}</div>` : ""}
-      ${objectives.length ? `<ol class="video-goal-list">${objectives.map((obj) => `<li>${escapeHTML(obj)}</li>`).join("")}</ol>` : '<p style="color:var(--muted)">لم يتم استخراج أهداف</p>'}
-    </div>`;
+      <div class="video-segments">${(item.segments || []).map(renderVideoSegment).join("")}</div>
+    </section>`;
   }).join("");
 
-  videoEls.container.innerHTML = statsHtml + cardsHtml;
+  videoEls.container.innerHTML = statsHtml + resultsHtml;
   videoEls.resultsSection.classList.add("is-active");
   elements.workspaceView.classList.remove("is-active");
   if (videoEls.section) videoEls.section.classList.remove("is-active");
@@ -1047,8 +1105,13 @@ function renderVideoResults(data) {
 
 videoEls.form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!videoEls.apiKey.value.trim()) {
+    showToast("أضف مفتاح Gemini لتحليل الفيديو", "error");
+    videoEls.apiKey.focus();
+    return;
+  }
   videoEls.extractBtn.disabled = true;
-  videoEls.status.textContent = "جارٍ استخراج الأهداف...";
+  videoEls.status.textContent = "جارٍ تنزيل الفيديو وتحليل السلايدات...";
   elements.processingView.classList.add("is-active");
   videoEls.section.classList.remove("is-active");
   startProgress();
@@ -1056,7 +1119,6 @@ videoEls.form.addEventListener("submit", async (event) => {
   const formData = new FormData(videoEls.form);
   const body = {
     url: formData.get("url"),
-    second: parseInt(formData.get("second"), 10) || 12,
     start: formData.get("start") ? parseInt(formData.get("start"), 10) : null,
     end: formData.get("end") ? parseInt(formData.get("end"), 10) : null,
     provider: formData.get("provider") || "gemini",
@@ -1065,22 +1127,24 @@ videoEls.form.addEventListener("submit", async (event) => {
   };
 
   try {
-    const resp = await fetch("/api/extract-video-goals", {
+    const resp = await fetch("/api/analyze-video", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
       const errorData = await resp.json().catch(() => ({}));
-      throw new Error(errorData.detail || "فشل استخراج أهداف الفيديو");
+      throw new Error(errorData.detail || "فشل تحليل الفيديو");
     }
     const data = await resp.json();
     videoState.result = data;
     stopProgress(true);
     elements.processingView.classList.remove("is-active");
     renderVideoResults(data);
-    videoEls.status.textContent = `تم استخراج ${data.total_objectives || 0} هدف`;
-    showToast(`تم استخراج ${data.total_objectives || 0} هدف`);
+    const totalSegments = (data.results || []).reduce((sum, item) => sum + (item.segments || []).length, 0);
+    videoEls.apiKey.value = "";
+    videoEls.status.textContent = `تم شرح ${totalSegments} مقطع`;
+    showToast(`تم شرح ${totalSegments} مقطع`);
   } catch (error) {
     stopProgress(false);
     elements.processingView.classList.remove("is-active");
@@ -1104,55 +1168,71 @@ videoEls.copyBtn.addEventListener("click", async () => {
   const lines = [];
   for (const item of videoState.result.results || []) {
     lines.push(`## ${item.video_title}`);
-    for (const obj of item.objectives || []) {
-      lines.push(`- ${obj}`);
+    if (item.error) {
+      lines.push(`خطأ: ${item.error}`, "");
+      continue;
+    }
+    lines.push(item.overall_summary || "");
+    for (const objective of item.learning_objectives || []) lines.push(`- ${objective}`);
+    for (const segment of item.segments || []) {
+      lines.push("", `### ${segment.title} (${formatVideoTime(segment.start_sec)} - ${formatVideoTime(segment.end_sec)})`);
+      lines.push(segment.arabic_explanation || segment.segment_summary || "");
+      if (segment.transcript_text) lines.push(`النص المنطوق: ${segment.transcript_text}`);
     }
     lines.push("");
   }
   try {
     await navigator.clipboard.writeText(lines.join("\n"));
-    showToast("تم نسخ الأهداف");
+    showToast("تم نسخ شرح الفيديو");
   } catch { showToast("تعذر النسخ", "error"); }
 });
 
 videoEls.exportBtn.addEventListener("click", () => {
   if (!videoState.result) return;
-  const goals = videoState.result.results || [];
+  const results = videoState.result.results || [];
+  const exportedVideos = results.map((item) => {
+    if (item.error) return `<section><h2>${escapeHTML(item.video_title || "فيديو")}</h2><p class="error">${escapeHTML(item.error)}</p></section>`;
+    const segments = (item.segments || []).map((segment) => {
+      const frame = String(segment.frame_data_url || "");
+      const image = frame.startsWith("data:image/") ? `<img src="${frame}" alt="إطار المقطع ${segment.index}">` : "";
+      const points = (segment.key_points || []).map((point) => `<li>${escapeHTML(point)}</li>`).join("");
+      return `<article><header><b>المقطع ${segment.index}</b><h3>${escapeHTML(segment.title)}</h3><time>${formatVideoTime(segment.start_sec)} - ${formatVideoTime(segment.end_sec)}</time></header><div class="segment">${image}<div><p>${richText(segment.arabic_explanation || segment.segment_summary || "")}</p>${points ? `<ul>${points}</ul>` : ""}</div></div>${segment.transcript_text ? `<details><summary>النص المنطوق</summary><p>${richText(segment.transcript_text)}</p></details>` : ""}</article>`;
+    }).join("");
+    const objectives = (item.learning_objectives || []).map((objective) => `<li>${escapeHTML(objective)}</li>`).join("");
+    return `<section><h2>${escapeHTML(item.video_title)}</h2><div class="meta"><span>${formatVideoTime(item.duration_sec)}</span><span>${transcriptSourceLabel(item.transcript_source)}</span><span>${segmentationModeLabel(item.segmentation_mode)}</span></div><div class="overview"><div><h3>الخلاصة العامة</h3><p>${richText(item.overall_summary || "")}</p></div><div><h3>أهداف التعلم</h3><ul>${objectives}</ul></div></div>${segments}</section>`;
+  }).join("");
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>أهداف الفيديو - Video Goals</title>
+<title>شرح الفيديو - Dr. Solution.</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, Arial, sans-serif; background: #f5f8fa; color: #17212b; padding: 32px; line-height: 1.8; }
-  .container { max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 1.8rem; margin-bottom: 8px; color: #1a73e8; }
-  .meta { display: flex; gap: 16px; margin-bottom: 24px; color: #657481; font-size: 0.9rem; }
-  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 24px; margin-bottom: 16px; }
-  .card h2 { font-size: 1.1rem; color: #1a73e8; margin-bottom: 12px; }
-  ol { padding-right: 24px; }
-  li { margin-bottom: 8px; padding: 8px 12px; background: #f8faff; border-radius: 6px; border-right: 3px solid #1a73e8; }
-  .footer { text-align: center; margin-top: 32px; color: #99a7b3; font-size: 0.85rem; }
+  body { font-family: system-ui, Arial, sans-serif; background: #f3f6fa; color: #17212b; padding: 28px; line-height: 1.85; }
+  .container { max-width: 1120px; margin: 0 auto; } h1 { margin-bottom: 24px; color: #1557b0; }
+  section { margin-bottom: 42px; } section > h2 { margin-bottom: 8px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; color: #657481; font-size: .88rem; }
+  .overview { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; padding: 20px; margin-bottom: 22px; border: 1px solid #d6dce4; background: #fff; }
+  article { margin-bottom: 18px; overflow: hidden; border: 1px solid #d6dce4; border-radius: 8px; background: #fff; }
+  article header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e7ed; } article header h3 { flex: 1; }
+  article time { color: #657481; font-size: .82rem; direction: ltr; } .segment { display: grid; grid-template-columns: minmax(260px,.8fr) minmax(0,1.2fr); gap: 20px; padding: 18px; }
+  .segment img { width: 100%; max-height: 360px; object-fit: contain; background: #eef2f7; } ul { padding-right: 22px; }
+  details { padding: 12px 18px; border-top: 1px solid #e2e7ed; } summary { cursor: pointer; color: #1557b0; font-weight: 700; } details p { margin-top: 10px; }
+  .error { padding: 16px; color: #b3261e; background: #fff; } .footer { text-align: center; color: #7a8792; }
+  @media(max-width:720px){body{padding:14px}.overview,.segment{grid-template-columns:1fr}article header{align-items:flex-start;flex-direction:column}}
 </style>
 </head>
 <body><div class="container">
-  <h1>🎯 أهداف الفيديو المستخرجة</h1>
-  <div class="meta"><span>${videoState.result.total_videos} فيديو</span><span>${videoState.result.total_objectives} هدف</span><span>الثانية ${videoState.result.second}</span><span>${escapeHTML(videoState.result.provider)}</span></div>
-  ${goals.map((item) => {
-    const objList = (item.objectives || []).map((o) => `<li>${escapeHTML(o)}</li>`).join("");
-    return item.error
-      ? `<div class="card"><h2>${escapeHTML(item.video_title)}</h2><p style="color:#d93025">${escapeHTML(item.error)}</p></div>`
-      : `<div class="card"><h2>${escapeHTML(item.video_title)}</h2><ol>${objList}</ol></div>`;
-  }).join("")}
-  <div class="footer">تم الإنشاء بواسطة Video Goals Extractor</div>
+  <h1>شرح الفيديو الأكاديمي</h1>
+  ${exportedVideos}
+  <div class="footer">تم الإنشاء بواسطة Dr. Solution.</div>
 </div></body></html>`;
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "video-goals.html";
+  a.download = "dr-solution-video-analysis.html";
   a.click();
   URL.revokeObjectURL(a.href);
-  showToast("تم تنزيل ملف HTML");
+  showToast("تم تنزيل شرح الفيديو بصيغة HTML");
 });
 
 applyTheme(localStorage.getItem(THEME_KEY) || "light");

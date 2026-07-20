@@ -8,7 +8,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -27,6 +29,13 @@ def _run(cmd: list[str], timeout: int = 120) -> subprocess.CompletedProcess[str]
 
 def _check_tool(name: str) -> str:
     cmd = shutil.which(name)
+    if not cmd and name == "ffmpeg":
+        try:
+            import imageio_ffmpeg
+
+            cmd = imageio_ffmpeg.get_ffmpeg_exe()
+        except (ImportError, RuntimeError):
+            cmd = None
     if not cmd:
         raise RuntimeError(f"الأداة '{name}' غير مثبتة. قم بتثبيتها أولاً.")
     return cmd
@@ -40,6 +49,22 @@ def _extract_video_id(url: str) -> str:
     if "/shorts/" in url:
         return url.split("/shorts/")[1].split("?")[0]
     return ""
+
+
+def is_youtube_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    allowed_hosts = {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+    }
+    return parsed.scheme == "https" and host in allowed_hosts
 
 
 def get_playlist_videos(url: str, start: int | None = None, end: int | None = None) -> list[dict]:
@@ -93,6 +118,39 @@ def get_direct_video_url(video_url: str) -> str:
     return direct
 
 
+def download_video_file(video_url: str, output_dir: Path) -> Path:
+    yt_dlp = _check_tool("yt-dlp")
+    ffmpeg = _check_tool("ffmpeg")
+    output_template = output_dir / "source.%(ext)s"
+    result = _run(
+        [
+            yt_dlp,
+            "--no-playlist",
+            "--no-warnings",
+            "--ffmpeg-location",
+            ffmpeg,
+            "-f",
+            "best[height<=480][ext=mp4]/best[height<=480]/best[ext=mp4]/best",
+            "--merge-output-format",
+            "mp4",
+            "-o",
+            str(output_template),
+            video_url,
+        ],
+        timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"فشل تنزيل نسخة التحليل من الفيديو: {result.stderr.strip()}")
+
+    candidates = [
+        path for path in output_dir.glob("source.*")
+        if path.is_file() and path.suffix not in {".part", ".ytdl"}
+    ]
+    if not candidates:
+        raise RuntimeError("اكتمل تنزيل الفيديو لكن ملف التحليل غير موجود.")
+    return max(candidates, key=lambda path: path.stat().st_size)
+
+
 def get_video_info(url: str) -> dict:
     yt_dlp = _check_tool("yt-dlp")
     result = _run(
@@ -120,7 +178,7 @@ def get_transcript(url: str) -> list[dict]:
         cmd = [
             yt_dlp, "--skip-download",
             "--write-auto-subs", "--write-subs",
-            "--sub-langs", "all",
+            "--sub-langs", "ar.*,en.*,ar,en",
             "--convert-subs", "srt",
             "-o", os.path.join(tmpdir, "%(id)s.%(ext)s"),
             "--no-warnings", url,
@@ -199,6 +257,139 @@ def _ts_to_sec(t: str) -> float:
     if len(parts) == 2:
         return int(parts[0]) * 60 + float(parts[1])
     return float(parts[0])
+
+
+@lru_cache(maxsize=2)
+def _load_whisper_model(model_name: str, compute_type: str):
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as exc:
+        raise RuntimeError("مكتبة faster-whisper غير مثبتة على الخادم.") from exc
+
+    cpu_threads = max(1, min(os.cpu_count() or 2, 4))
+    return WhisperModel(
+        model_name,
+        device="cpu",
+        compute_type=compute_type,
+        cpu_threads=cpu_threads,
+    )
+
+
+def transcribe_with_whisper(video_path: Path, settings: Settings) -> list[dict]:
+    model = _load_whisper_model(settings.whisper_model, settings.whisper_compute_type)
+    segments, _ = model.transcribe(
+        str(video_path),
+        beam_size=1,
+        vad_filter=True,
+        condition_on_previous_text=False,
+    )
+    transcript = []
+    for segment in segments:
+        text = segment.text.strip()
+        if text:
+            transcript.append({
+                "start": float(segment.start),
+                "end": float(segment.end),
+                "text": text,
+            })
+    return transcript
+
+
+def detect_scene_boundaries(
+    video_path: Path,
+    duration: float,
+    settings: Settings,
+) -> list[float]:
+    if not settings.video_enable_scene_detection or duration <= 0:
+        return []
+    try:
+        from scenedetect import ContentDetector, detect
+    except ImportError as exc:
+        raise RuntimeError("مكتبة PySceneDetect غير مثبتة على الخادم.") from exc
+
+    scenes = detect(
+        str(video_path),
+        ContentDetector(threshold=settings.video_scene_threshold),
+        show_progress=False,
+    )
+    candidates = [float(start.get_seconds()) for start, _ in scenes[1:]]
+    boundaries = []
+    last = 0.0
+    for second in candidates:
+        if second >= duration:
+            continue
+        if second - last >= settings.video_min_scene_seconds:
+            boundaries.append(second)
+            last = second
+    return boundaries
+
+
+def _split_long_intervals(boundaries: list[float], max_duration: float) -> list[float]:
+    if max_duration <= 0:
+        return boundaries
+    expanded = [boundaries[0]]
+    for start, end in zip(boundaries, boundaries[1:]):
+        cursor = start + max_duration
+        while cursor < end:
+            expanded.append(cursor)
+            cursor += max_duration
+        expanded.append(end)
+    return sorted(set(expanded))
+
+
+def _limit_boundaries(boundaries: list[float], max_segments: int) -> list[float]:
+    limited = list(boundaries)
+    max_segments = max(1, max_segments)
+    while len(limited) - 1 > max_segments:
+        durations = [end - start for start, end in zip(limited, limited[1:])]
+        shortest = min(range(len(durations)), key=durations.__getitem__)
+        remove_at = shortest if shortest == len(durations) - 1 else shortest + 1
+        del limited[remove_at]
+    return limited
+
+
+def build_video_segments(
+    transcript: list[dict],
+    scene_boundaries: list[float],
+    duration: float,
+    settings: Settings,
+) -> tuple[list[dict], str]:
+    transcript_end = max((float(item.get("end", 0)) for item in transcript), default=0.0)
+    duration = max(float(duration or 0), transcript_end, 1.0)
+
+    if scene_boundaries:
+        boundaries = [0.0, *scene_boundaries, duration]
+        segmentation_mode = "scene_detection"
+    else:
+        boundaries = [0.0]
+        cursor = float(SEGMENT_DURATION)
+        while cursor < duration:
+            boundaries.append(cursor)
+            cursor += SEGMENT_DURATION
+        boundaries.append(duration)
+        segmentation_mode = "timed_fallback"
+
+    boundaries = sorted(set(max(0.0, min(float(value), duration)) for value in boundaries))
+    if boundaries[0] != 0.0:
+        boundaries.insert(0, 0.0)
+    if boundaries[-1] != duration:
+        boundaries.append(duration)
+    boundaries = _split_long_intervals(boundaries, settings.video_max_segment_seconds)
+    boundaries = _limit_boundaries(boundaries, settings.video_max_segments)
+
+    segments = []
+    for start, end in zip(boundaries, boundaries[1:]):
+        matching_text = []
+        for item in transcript:
+            item_start = float(item.get("start", 0))
+            item_end = float(item.get("end", item_start))
+            midpoint = (item_start + item_end) / 2
+            if start <= midpoint < end or (end == duration and midpoint == end):
+                text = str(item.get("text", "")).strip()
+                if text:
+                    matching_text.append(text)
+        segments.append({"start": start, "end": end, "text": " ".join(matching_text)})
+    return segments, segmentation_mode
 
 
 def _merge_transcript_chunks(transcript: list[dict], chunk_duration: float = SEGMENT_DURATION) -> list[dict]:
@@ -338,15 +529,16 @@ async def process_video(
     api_key: str,
     settings: Settings,
 ) -> dict:
-    videos = get_playlist_videos(url, start, end)
+    videos = await asyncio.to_thread(get_playlist_videos, url, start, end)
     if not videos:
         raise RuntimeError("لم يتم العثور على فيديوهات.")
 
     results = []
     for video in videos:
         try:
-            frame_path = grab_frame(get_direct_video_url(video["url"]), second)
-            image_b64 = image_to_base64(frame_path)
+            direct_url = await asyncio.to_thread(get_direct_video_url, video["url"])
+            frame_path = await asyncio.to_thread(grab_frame, direct_url, second)
+            image_b64 = await asyncio.to_thread(image_to_base64, frame_path)
 
             if provider == "gemini":
                 objectives = await extract_with_gemini(
@@ -393,70 +585,128 @@ async def analyze_single_video(
     model: str,
 ) -> VideoAnalysisResult:
     video_url = video["url"]
-    info = get_video_info(video_url)
+    info = await asyncio.to_thread(get_video_info, video_url)
     title = info.get("title", "فيديو بدون عنوان")
-    duration = info.get("duration", 0)
+    duration = float(info.get("duration", 0) or 0)
+    if duration > settings.video_max_duration_seconds:
+        limit_minutes = settings.video_max_duration_seconds // 60
+        raise RuntimeError(f"مدة الفيديو تتجاوز الحد الحالي للتحليل ({limit_minutes} دقيقة).")
 
-    transcript = get_transcript(video_url)
-    segments = _merge_transcript_chunks(transcript)
-    if not segments:
-        duration_min = max(60, duration)
-        num_segments = max(1, int(duration_min / SEGMENT_DURATION))
-        seg_dur = duration_min / num_segments
-        segments = [
-            {"start": i * seg_dur, "end": (i + 1) * seg_dur, "text": ""}
-            for i in range(num_segments)
-        ]
+    warnings: list[str] = []
+    try:
+        transcript = await asyncio.to_thread(get_transcript, video_url)
+    except RuntimeError as exc:
+        transcript = []
+        warnings.append(str(exc))
+    transcript_source = "youtube_captions" if transcript else ""
 
-    direct_url = get_direct_video_url(video_url)
-    semaphore = asyncio.Semaphore(2)
-    segment_results: list[VideoSegmentAnalysis] = []
+    with tempfile.TemporaryDirectory(prefix="dr-solution-video-") as tmpdir:
+        workspace = Path(tmpdir)
+        video_path = await asyncio.to_thread(download_video_file, video_url, workspace)
 
-    async def process_segment(idx: int, seg: dict) -> VideoSegmentAnalysis:
-        async with semaphore:
-            mid_sec = int((seg["start"] + seg["end"]) / 2)
-            frame_path = grab_frame(direct_url, mid_sec)
-            image_b64 = image_to_base64(frame_path)
-            try:
-                raw = await analyze_video_segment(
-                    image_b64, "image/jpeg", seg["text"],
-                    model, api_key, settings,
+        if not transcript:
+            if not settings.video_enable_whisper:
+                warnings.append("لا توجد ترجمة YouTube وWhisper متوقف في إعدادات الخادم.")
+            elif duration and duration > settings.video_whisper_max_duration_seconds:
+                limit_minutes = settings.video_whisper_max_duration_seconds // 60
+                warnings.append(
+                    f"لا توجد ترجمة YouTube؛ تم تجاوز حد Whisper المجاني ({limit_minutes} دقيقة)، "
+                    "لذلك سيعتمد الشرح على الصورة فقط."
                 )
-                terms = []
-                for t in raw.get("technical_terms", []):
-                    terms.append(VideoTechnicalTerm(
-                        term=t.get("term", ""),
-                        arabic_equivalent=t.get("arabic_equivalent", ""),
-                        explanation=t.get("explanation", ""),
-                    ))
-                result = VideoSegmentAnalysis(
-                    index=idx + 1,
-                    start_sec=seg["start"],
-                    end_sec=seg["end"],
-                    title=raw.get("title", f"مقطع {idx + 1}"),
-                    arabic_explanation=raw.get("arabic_explanation", ""),
-                    translation=raw.get("translation", ""),
-                    key_points=raw.get("key_points", []),
-                    technical_terms=terms,
-                    segment_summary=raw.get("segment_summary", ""),
-                    frame_data_url="",
-                )
-            except Exception as exc:
-                result = VideoSegmentAnalysis(
-                    index=idx + 1,
-                    start_sec=seg["start"],
-                    end_sec=seg["end"],
-                    title=f"مقطع {idx + 1}",
-                    arabic_explanation=f"تعذر التحليل: {exc}",
-                    segment_summary=f"تعذر التحليل: {exc}",
-                )
-            return result
+            else:
+                try:
+                    transcript = await asyncio.to_thread(transcribe_with_whisper, video_path, settings)
+                    if transcript:
+                        transcript_source = "whisper"
+                    else:
+                        warnings.append("اكتمل Whisper لكن لم يكتشف كلاماً واضحاً في الفيديو.")
+                except Exception as exc:
+                    warnings.append(f"تعذر تشغيل Whisper: {exc}")
 
-    tasks = [process_segment(i, seg) for i, seg in enumerate(segments)]
-    for coro in asyncio.as_completed(tasks):
-        result = await coro
-        segment_results.append(result)
-    segment_results.sort(key=lambda s: s.index)
+        try:
+            scene_boundaries = await asyncio.to_thread(
+                detect_scene_boundaries,
+                video_path,
+                duration or max((item.get("end", 0) for item in transcript), default=0),
+                settings,
+            )
+        except Exception as exc:
+            scene_boundaries = []
+            warnings.append(f"تعذر كشف تغيّر السلايدات؛ استُخدم التقطيع الزمني: {exc}")
+
+        segments, segmentation_mode = build_video_segments(
+            transcript,
+            scene_boundaries,
+            duration,
+            settings,
+        )
+        if not scene_boundaries:
+            warnings.append("لم تُكتشف تغيّرات سلايد واضحة؛ استُخدم التقطيع الزمني الآمن.")
+        if not transcript_source:
+            transcript_source = "unavailable"
+
+        semaphore = asyncio.Semaphore(2)
+        segment_results: list[VideoSegmentAnalysis] = []
+
+        async def process_segment(idx: int, seg: dict) -> VideoSegmentAnalysis:
+            async with semaphore:
+                frame_data_url = ""
+                try:
+                    mid_sec = int((seg["start"] + seg["end"]) / 2)
+                    frame_path = await asyncio.to_thread(
+                        grab_frame,
+                        str(video_path),
+                        mid_sec,
+                        workspace / f"frame-{idx + 1:03}.jpg",
+                    )
+                    image_b64 = image_to_base64(frame_path)
+                    frame_data_url = f"data:image/jpeg;base64,{image_b64}"
+                    raw = await analyze_video_segment(
+                        image_b64,
+                        "image/jpeg",
+                        seg["text"],
+                        model,
+                        api_key,
+                        settings,
+                    )
+                    terms = [
+                        VideoTechnicalTerm(
+                            term=item.get("term", ""),
+                            arabic_equivalent=item.get("arabic_equivalent", ""),
+                            explanation=item.get("explanation", ""),
+                        )
+                        for item in raw.get("technical_terms", [])
+                    ]
+                    return VideoSegmentAnalysis(
+                        index=idx + 1,
+                        start_sec=seg["start"],
+                        end_sec=seg["end"],
+                        title=raw.get("title", f"مقطع {idx + 1}"),
+                        transcript_text=seg["text"],
+                        arabic_explanation=raw.get("arabic_explanation", ""),
+                        translation=raw.get("translation", ""),
+                        key_points=raw.get("key_points", []),
+                        technical_terms=terms,
+                        segment_summary=raw.get("segment_summary", ""),
+                        frame_data_url=frame_data_url,
+                    )
+                except Exception as exc:
+                    warnings.append(f"تعذر تحليل المقطع {idx + 1}: {exc}")
+                    return VideoSegmentAnalysis(
+                        index=idx + 1,
+                        start_sec=seg["start"],
+                        end_sec=seg["end"],
+                        title=f"مقطع {idx + 1}",
+                        transcript_text=seg["text"],
+                        arabic_explanation=f"تعذر التحليل: {exc}",
+                        segment_summary=f"تعذر التحليل: {exc}",
+                        frame_data_url=frame_data_url,
+                    )
+
+        tasks = [process_segment(i, seg) for i, seg in enumerate(segments)]
+        for coro in asyncio.as_completed(tasks):
+            segment_results.append(await coro)
+        segment_results.sort(key=lambda segment: segment.index)
 
     all_terms = []
     seen_terms = set()
@@ -480,13 +730,17 @@ async def analyze_single_video(
             ))
         if glossary_terms:
             all_terms = glossary_terms
-    except Exception:
+    except Exception as exc:
         overall_summary = ""
         objectives = []
+        warnings.append(f"تعذر بناء الخلاصة العامة: {exc}")
 
     return VideoAnalysisResult(
         video_title=title,
         duration_sec=duration,
+        transcript_source=transcript_source,
+        segmentation_mode=segmentation_mode,
+        warnings=list(dict.fromkeys(warnings)),
         segments=segment_results,
         overall_summary=overall_summary,
         learning_objectives=objectives,
@@ -502,14 +756,21 @@ async def process_video_deep(
     model: str,
     settings: Settings,
 ) -> list[dict]:
+    if not is_youtube_url(url):
+        raise RuntimeError("يجب استخدام رابط YouTube صالح يبدأ بـ https://.")
     api_key = api_key.strip() or settings.gemini_api_key
     if not api_key:
         raise RuntimeError("مفتاح Gemini مطلوب لتحليل الفيديو.")
 
     resolve_model = model.strip() or settings.gemini_model
-    videos = get_playlist_videos(url, start, end)
+    videos = await asyncio.to_thread(get_playlist_videos, url, start, end)
     if not videos:
         raise RuntimeError("لم يتم العثور على فيديوهات.")
+    if len(videos) > settings.video_max_playlist_items:
+        raise RuntimeError(
+            f"يمكن تحليل {settings.video_max_playlist_items} فيديوهات كحد أقصى في العملية الواحدة. "
+            "حدّد حقلي من وإلى لتقسيم القائمة."
+        )
 
     results = []
     for video in videos:

@@ -25,7 +25,7 @@ from app.models import (
 from app.services.documents import DocumentError, DocumentExtractor
 from app.services.providers import LANGUAGES, ProviderError, get_provider, get_provider_chat
 from app.models import VideoAnalyzeRequest
-from app.services.video import process_video, process_video_deep
+from app.services.video import is_youtube_url, process_video, process_video_deep
 
 
 class ChatMessage(BaseModel):
@@ -84,7 +84,7 @@ async def providers(settings: Annotated[Settings, Depends(get_settings)]) -> lis
             model=settings.deepseek_model,
             configured=bool(settings.deepseek_api_key),
             supports_vision=False,
-            free_tier=True,
+            free_tier=False,
             accepts_user_key=True,
             requires_user_key=settings.require_user_api_key,
             key_url="https://platform.deepseek.com/api_keys",
@@ -360,6 +360,8 @@ async def analyze_video(
 ):
     if not body.url.strip():
         raise HTTPException(422, "رابط الفيديو مطلوب")
+    if not is_youtube_url(body.url):
+        raise HTTPException(422, "أدخل رابط YouTube صالحاً يبدأ بـ https://")
     try:
         results = await process_video_deep(
             url=body.url.strip(),

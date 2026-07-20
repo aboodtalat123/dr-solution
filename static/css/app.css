@@ -88,6 +88,29 @@
   border-radius: var(--radius);
   padding: 24px;
 }
+.video-form .settings-bar {
+  grid-template-columns: minmax(320px, 1fr) 100px 100px 150px;
+}
+.video-field {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  text-align: center;
+}
+.video-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.video-url-field {
+  direction: ltr;
+  text-align: left;
+}
 .video-results-section {
   padding: 24px;
   max-width: 1000px;
@@ -172,4 +195,276 @@
 .video-goal-stat span {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.video-analysis-result {
+  margin-bottom: 48px;
+}
+
+.video-analysis-header,
+.video-analysis-meta,
+.video-segment-card__header {
+  display: flex;
+  align-items: center;
+}
+
+.video-analysis-header {
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.video-analysis-header h2 {
+  margin: 3px 0 0;
+  font-size: 22px;
+}
+
+.video-analysis-meta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.video-analysis-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.video-analysis-meta svg,
+.video-warnings svg {
+  width: 14px;
+  height: 14px;
+}
+
+.video-warnings {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-right: 3px solid var(--amber);
+  color: var(--ink-soft);
+  background: var(--gold-soft);
+}
+
+.video-warnings p {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.video-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.8fr);
+  gap: 0;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.video-overview > div {
+  padding: 20px;
+}
+
+.video-overview > div + div {
+  border-right: 1px solid var(--line);
+}
+
+.video-overview strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--primary-dark);
+  font-size: 13px;
+}
+
+.video-overview p,
+.video-overview li {
+  color: var(--ink-soft);
+  line-height: 1.85;
+}
+
+.video-overview ul {
+  margin: 0;
+  padding-right: 20px;
+}
+
+.video-segments {
+  display: grid;
+  gap: 16px;
+}
+
+.video-segment-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.video-segment-card__header {
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.video-segment-card__header > span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--primary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.video-segment-card__header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+}
+
+.video-segment-card__header time {
+  direction: ltr;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.video-segment-card__body {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  min-height: 260px;
+}
+
+.video-segment-frame {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 12px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
+.video-segment-frame img {
+  width: 100%;
+  height: 100%;
+  max-height: 380px;
+  object-fit: contain;
+}
+
+.video-segment-frame svg {
+  width: 30px;
+  height: 30px;
+}
+
+.video-segment-explanation {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.video-segment-explanation p,
+.video-transcript p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.95;
+}
+
+.video-translation {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.video-translation strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--primary-dark);
+  font-size: 12px;
+}
+
+.video-key-points {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 16px 38px 16px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.video-key-points li {
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.video-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.video-terms span {
+  display: inline-flex;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--primary-soft);
+  font-size: 11px;
+}
+
+.video-terms b {
+  color: var(--primary-dark);
+}
+
+.video-transcript {
+  padding: 13px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.video-transcript summary {
+  cursor: pointer;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.video-transcript p {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+@media (max-width: 760px) {
+  .video-section,
+  .video-results-section { padding: 0; }
+  .video-form { padding: 0; }
+  .video-form .settings-bar { grid-template-columns: 1fr 1fr; }
+  .video-url-control,
+  .video-provider-control { grid-column: 1 / -1; }
+  .video-index-control { min-width: 0; }
+  .video-analysis-header { align-items: flex-start; flex-direction: column; }
+  .video-analysis-meta { justify-content: flex-start; }
+  .video-overview { grid-template-columns: 1fr; }
+  .video-overview > div + div { border-top: 1px solid var(--line); border-right: 0; }
+  .video-segment-card__header { align-items: flex-start; flex-wrap: wrap; }
+  .video-segment-card__header h3 { flex-basis: calc(100% - 80px); }
+  .video-segment-card__body { grid-template-columns: 1fr; }
+  .video-segment-frame { min-height: 210px; border-bottom: 1px solid var(--line); border-left: 0; }
+  .video-segment-explanation { padding: 18px; }
+  .video-goal-stats { gap: 8px; }
+  .video-goal-stat { padding: 12px 8px; }
 }

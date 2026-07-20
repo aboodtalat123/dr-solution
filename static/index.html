@@ -30,7 +30,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/css/app.css?v=3.1.0" />
+    <link rel="stylesheet" href="/static/css/app.css?v=3.2.0" />
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -149,7 +149,7 @@
               <i data-lucide="file-text"></i><span>ملف PDF أو صورة</span>
             </button>
             <button class="mode-tab" type="button" data-mode="video" role="tab" aria-selected="false">
-              <i data-lucide="video"></i><span>أهداف فيديو YouTube</span>
+              <i data-lucide="video"></i><span>شرح فيديو YouTube</span>
             </button>
           </div>
 
@@ -370,32 +370,28 @@
         <section class="video-section view" id="videoSection">
           <div class="workspace__header">
             <div>
-              <span class="eyebrow">استخراج أهداف الفيديو</span>
-              <h1>حوّل فيديو الكورس إلى أهداف تعليمية</h1>
+              <span class="eyebrow">تحليل المحاضرات المرئية</span>
+              <h1>حوّل فيديو الكورس إلى شرح مقسّم بالسلايدات</h1>
             </div>
           </div>
 
           <form class="video-form" id="videoForm">
             <div class="settings-bar">
-              <label class="control">
+              <label class="control video-url-control">
                 <span class="control__label"><i data-lucide="link"></i>رابط YouTube</span>
-                <input name="url" required placeholder="https://www.youtube.com/watch?v=... أو رابط قائمة تشغيل" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+                <input class="video-field video-url-field" name="url" required placeholder="https://www.youtube.com/watch?v=... أو رابط قائمة تشغيل">
               </label>
-              <label class="control" style="max-width:140px">
-                <span class="control__label"><i data-lucide="clock"></i>الثانية</span>
-                <input name="second" type="number" value="12" min="1" max="300" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
-              </label>
-              <label class="control" style="max-width:120px">
+              <label class="control video-index-control">
                 <span class="control__label"><i data-lucide="play"></i>من</span>
-                <input name="start" type="number" min="1" placeholder="1" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
+                <input class="video-field" name="start" type="number" min="1" placeholder="1">
               </label>
-              <label class="control" style="max-width:120px">
+              <label class="control video-index-control">
                 <span class="control__label"><i data-lucide="square"></i>إلى</span>
-                <input name="end" type="number" min="1" placeholder="10" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
+                <input class="video-field" name="end" type="number" min="1" placeholder="10">
               </label>
-              <label class="control" style="max-width:160px">
+              <label class="control video-provider-control">
                 <span class="control__label"><i data-lucide="brain-circuit"></i>المحرك</span>
-                <select name="provider" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+                <select class="video-field" name="provider">
                   <option value="gemini">Gemini</option>
                 </select>
               </label>
@@ -408,7 +404,7 @@
               </div>
               <div class="api-key-panel__actions">
                 <div class="api-key-control">
-                  <input id="videoApiKey" type="password" placeholder="ألصق مفتاح Gemini" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+                  <input id="videoApiKey" type="password" placeholder="ألصق مفتاح Gemini" autocomplete="off" spellcheck="false">
                 </div>
                 <a class="key-provider-link" id="videoKeyLink" href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">
                   <span>احصل على مفتاح Gemini</span><i data-lucide="external-link"></i>
@@ -417,10 +413,10 @@
             </section>
 
             <div class="form-footer">
-              <span class="form-hint"><i data-lucide="image"></i>يدعم الصور والنصوص</span>
+              <span class="form-hint"><i data-lucide="captions"></i>ترجمة YouTube ثم Whisper عند الحاجة</span>
               <span id="videoStatus" style="color:var(--muted);font-weight:600;"></span>
               <button class="primary-button" id="extractVideoButton" type="submit">
-                <i data-lucide="sparkles"></i><span>استخراج الأهداف</span><i data-lucide="arrow-left"></i>
+                <i data-lucide="sparkles"></i><span>ابدأ شرح الفيديو</span><i data-lucide="arrow-left"></i>
               </button>
             </div>
           </form>
@@ -433,8 +429,8 @@
                 <i data-lucide="arrow-right"></i>
               </button>
               <div>
-                <span class="eyebrow">نتائج الأهداف</span>
-                <h1 id="videoResultTitle">أهداف الفيديو</h1>
+                <span class="eyebrow">نتائج تحليل الفيديو</span>
+                <h1 id="videoResultTitle">شرح الفيديو</h1>
                 <div class="result-meta" id="videoResultMeta"></div>
               </div>
             </div>
@@ -531,8 +527,8 @@
     </div>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/static/js/exporter.js?v=3.1.0" defer></script>
-    <script src="/static/js/app.js?v=3.1.0" defer></script>
-    <script src="/static/js/chat-widget.js?v=3.1.0" defer></script>
+    <script src="/static/js/exporter.js?v=3.2.0" defer></script>
+    <script src="/static/js/app.js?v=3.2.0" defer></script>
+    <script src="/static/js/chat-widget.js?v=3.2.0" defer></script>
   </body>
 </html>
