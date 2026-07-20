@@ -144,6 +144,15 @@
             </div>
           </div>
 
+          <div class="mode-tabs" role="tablist" aria-label="طريقة التحليل">
+            <button class="mode-tab is-active" type="button" data-mode="file" role="tab" aria-selected="true">
+              <i data-lucide="file-text"></i><span>ملف PDF أو صورة</span>
+            </button>
+            <button class="mode-tab" type="button" data-mode="video" role="tab" aria-selected="false">
+              <i data-lucide="video"></i><span>أهداف فيديو YouTube</span>
+            </button>
+          </div>
+
           <form class="analysis-form" id="analysisForm">
             <div class="settings-bar">
               <label class="control">
@@ -356,6 +365,90 @@
               </button>
             </div>
           </form>
+        </section>
+
+        <section class="video-section view" id="videoSection">
+          <div class="workspace__header">
+            <div>
+              <span class="eyebrow">استخراج أهداف الفيديو</span>
+              <h1>حوّل فيديو الكورس إلى أهداف تعليمية</h1>
+            </div>
+          </div>
+
+          <form class="video-form" id="videoForm">
+            <div class="settings-bar">
+              <label class="control">
+                <span class="control__label"><i data-lucide="link"></i>رابط YouTube</span>
+                <input name="url" required placeholder="https://www.youtube.com/watch?v=... أو رابط قائمة تشغيل" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+              </label>
+              <label class="control" style="max-width:140px">
+                <span class="control__label"><i data-lucide="clock"></i>الثانية</span>
+                <input name="second" type="number" value="12" min="1" max="300" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
+              </label>
+              <label class="control" style="max-width:120px">
+                <span class="control__label"><i data-lucide="play"></i>من</span>
+                <input name="start" type="number" min="1" placeholder="1" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
+              </label>
+              <label class="control" style="max-width:120px">
+                <span class="control__label"><i data-lucide="square"></i>إلى</span>
+                <input name="end" type="number" min="1" placeholder="10" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;text-align:center;">
+              </label>
+              <label class="control" style="max-width:160px">
+                <span class="control__label"><i data-lucide="brain-circuit"></i>المحرك</span>
+                <select name="provider" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+                  <option value="gemini">Gemini</option>
+                </select>
+              </label>
+            </div>
+
+            <section class="api-key-panel">
+              <div class="api-key-panel__heading">
+                <span class="api-key-panel__icon"><i data-lucide="key-round"></i></span>
+                <div><strong>مفتاح المحرك</strong><span>يُستخدم لهذا الطلب فقط.</span></div>
+              </div>
+              <div class="api-key-panel__actions">
+                <div class="api-key-control">
+                  <input id="videoApiKey" type="password" placeholder="ألصق مفتاح Gemini" style="height:54px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;width:100%;">
+                </div>
+                <a class="key-provider-link" id="videoKeyLink" href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">
+                  <span>احصل على مفتاح Gemini</span><i data-lucide="external-link"></i>
+                </a>
+              </div>
+            </section>
+
+            <div class="form-footer">
+              <span class="form-hint"><i data-lucide="image"></i>يدعم الصور والنصوص</span>
+              <span id="videoStatus" style="color:var(--muted);font-weight:600;"></span>
+              <button class="primary-button" id="extractVideoButton" type="submit">
+                <i data-lucide="sparkles"></i><span>استخراج الأهداف</span><i data-lucide="arrow-left"></i>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="video-results-section view" id="videoResultsSection">
+          <header class="results__header">
+            <div class="results__title">
+              <button class="icon-button" id="videoBackButton" type="button" aria-label="العودة" title="تحليل جديد">
+                <i data-lucide="arrow-right"></i>
+              </button>
+              <div>
+                <span class="eyebrow">نتائج الأهداف</span>
+                <h1 id="videoResultTitle">أهداف الفيديو</h1>
+                <div class="result-meta" id="videoResultMeta"></div>
+              </div>
+            </div>
+            <div class="results__actions">
+              <button class="secondary-button" id="videoCopyButton" type="button">
+                <i data-lucide="copy"></i><span>نسخ</span>
+              </button>
+              <button class="secondary-button" id="videoExportButton" type="button">
+                <i data-lucide="file-code-2"></i><span>تنزيل HTML</span>
+              </button>
+            </div>
+          </header>
+
+          <div id="videoGoalsContainer"></div>
         </section>
 
         <section class="processing view" id="processingView" aria-live="polite">

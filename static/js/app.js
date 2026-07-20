@@ -971,6 +971,190 @@ elements.clearHistoryButton.addEventListener("click", async () => {
   showToast("تم مسح السجل");
 });
 
+/* ── Video Goals Mode ── */
+const videoState = { result: null };
+
+const videoEls = {
+  section: document.getElementById("videoSection"),
+  resultsSection: document.getElementById("videoResultsSection"),
+  form: document.getElementById("videoForm"),
+  extractBtn: document.getElementById("extractVideoButton"),
+  status: document.getElementById("videoStatus"),
+  apiKey: document.getElementById("videoApiKey"),
+  backBtn: document.getElementById("videoBackButton"),
+  copyBtn: document.getElementById("videoCopyButton"),
+  exportBtn: document.getElementById("videoExportButton"),
+  title: document.getElementById("videoResultTitle"),
+  meta: document.getElementById("videoResultMeta"),
+  container: document.getElementById("videoGoalsContainer"),
+  modeTabs: document.querySelectorAll(".mode-tab"),
+};
+
+let currentMode = "file";
+
+function switchMode(mode) {
+  currentMode = mode;
+  videoEls.modeTabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.mode === mode));
+  elements.workspaceView.classList.toggle("is-active", mode === "file");
+  if (videoEls.section) videoEls.section.classList.toggle("is-active", mode === "video");
+  elements.resultsView.classList.remove("is-active");
+  if (videoEls.resultsSection) videoEls.resultsSection.classList.remove("is-active");
+}
+
+videoEls.modeTabs.forEach((tab) => {
+  tab.addEventListener("click", () => switchMode(tab.dataset.mode));
+});
+
+function renderVideoResults(data) {
+  const goals = data.results || [];
+  const totalVideos = data.total_videos || 0;
+  const totalObj = data.total_objectives || 0;
+  videoEls.title.textContent = `${totalObj} هدف من ${totalVideos} فيديو`;
+  videoEls.meta.innerHTML = [
+    `<span><i data-lucide="cpu"></i>${escapeHTML(data.provider || "gemini")}</span>`,
+    `<span><i data-lucide="clock"></i>الثانية ${data.second}</span>`,
+    `<span><i data-lucide="target"></i>${totalObj} هدف</span>`,
+    `<span><i data-lucide="video"></i>${totalVideos} فيديو</span>`,
+  ].join("");
+
+  const statsHtml = `
+    <div class="video-goal-stats">
+      <div class="video-goal-stat"><strong>${totalVideos}</strong><span>فيديو</span></div>
+      <div class="video-goal-stat"><strong>${totalObj}</strong><span>هدف تعليمي</span></div>
+    </div>`;
+
+  const cardsHtml = goals.map((item) => {
+    const objectives = item.objectives || [];
+    const hasError = item.error;
+    return `<div class="video-goal-card">
+      <div class="video-goal-card__header">
+        <h3>${escapeHTML(item.video_title)}</h3>
+        <small>${item.timestamp_seconds}ث · ${objectives.length} هدف</small>
+      </div>
+      ${hasError ? `<div class="video-goal-error"><i data-lucide="alert-circle"></i> ${escapeHTML(item.error)}</div>` : ""}
+      ${objectives.length ? `<ol class="video-goal-list">${objectives.map((obj) => `<li>${escapeHTML(obj)}</li>`).join("")}</ol>` : '<p style="color:var(--muted)">لم يتم استخراج أهداف</p>'}
+    </div>`;
+  }).join("");
+
+  videoEls.container.innerHTML = statsHtml + cardsHtml;
+  videoEls.resultsSection.classList.add("is-active");
+  elements.workspaceView.classList.remove("is-active");
+  if (videoEls.section) videoEls.section.classList.remove("is-active");
+  elements.processingView.classList.remove("is-active");
+  elements.resultsView.classList.remove("is-active");
+  refreshIcons();
+}
+
+videoEls.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  videoEls.extractBtn.disabled = true;
+  videoEls.status.textContent = "جارٍ استخراج الأهداف...";
+  elements.processingView.classList.add("is-active");
+  videoEls.section.classList.remove("is-active");
+  startProgress();
+
+  const formData = new FormData(videoEls.form);
+  const body = {
+    url: formData.get("url"),
+    second: parseInt(formData.get("second"), 10) || 12,
+    start: formData.get("start") ? parseInt(formData.get("start"), 10) : null,
+    end: formData.get("end") ? parseInt(formData.get("end"), 10) : null,
+    provider: formData.get("provider") || "gemini",
+    api_key: videoEls.apiKey.value.trim(),
+    model: "",
+  };
+
+  try {
+    const resp = await fetch("/api/extract-video-goals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      throw new Error(errorData.detail || "فشل استخراج أهداف الفيديو");
+    }
+    const data = await resp.json();
+    videoState.result = data;
+    stopProgress(true);
+    elements.processingView.classList.remove("is-active");
+    renderVideoResults(data);
+    videoEls.status.textContent = `تم استخراج ${data.total_objectives || 0} هدف`;
+    showToast(`تم استخراج ${data.total_objectives || 0} هدف`);
+  } catch (error) {
+    stopProgress(false);
+    elements.processingView.classList.remove("is-active");
+    videoEls.section.classList.add("is-active");
+    videoEls.status.textContent = "";
+    showToast(error.message || "حدث خطأ", "error");
+  } finally {
+    videoEls.extractBtn.disabled = false;
+  }
+});
+
+videoEls.backBtn.addEventListener("click", () => {
+  if (videoEls.resultsSection) videoEls.resultsSection.classList.remove("is-active");
+  if (videoEls.section) videoEls.section.classList.add("is-active");
+  closeSidebar();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  setNavigation("workspace");
+});
+videoEls.copyBtn.addEventListener("click", async () => {
+  if (!videoState.result) return;
+  const lines = [];
+  for (const item of videoState.result.results || []) {
+    lines.push(`## ${item.video_title}`);
+    for (const obj of item.objectives || []) {
+      lines.push(`- ${obj}`);
+    }
+    lines.push("");
+  }
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    showToast("تم نسخ الأهداف");
+  } catch { showToast("تعذر النسخ", "error"); }
+});
+
+videoEls.exportBtn.addEventListener("click", () => {
+  if (!videoState.result) return;
+  const goals = videoState.result.results || [];
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>أهداف الفيديو - Video Goals</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, Arial, sans-serif; background: #f5f8fa; color: #17212b; padding: 32px; line-height: 1.8; }
+  .container { max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 8px; color: #1a73e8; }
+  .meta { display: flex; gap: 16px; margin-bottom: 24px; color: #657481; font-size: 0.9rem; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 24px; margin-bottom: 16px; }
+  .card h2 { font-size: 1.1rem; color: #1a73e8; margin-bottom: 12px; }
+  ol { padding-right: 24px; }
+  li { margin-bottom: 8px; padding: 8px 12px; background: #f8faff; border-radius: 6px; border-right: 3px solid #1a73e8; }
+  .footer { text-align: center; margin-top: 32px; color: #99a7b3; font-size: 0.85rem; }
+</style>
+</head>
+<body><div class="container">
+  <h1>🎯 أهداف الفيديو المستخرجة</h1>
+  <div class="meta"><span>${videoState.result.total_videos} فيديو</span><span>${videoState.result.total_objectives} هدف</span><span>الثانية ${videoState.result.second}</span><span>${escapeHTML(videoState.result.provider)}</span></div>
+  ${goals.map((item) => {
+    const objList = (item.objectives || []).map((o) => `<li>${escapeHTML(o)}</li>`).join("");
+    return item.error
+      ? `<div class="card"><h2>${escapeHTML(item.video_title)}</h2><p style="color:#d93025">${escapeHTML(item.error)}</p></div>`
+      : `<div class="card"><h2>${escapeHTML(item.video_title)}</h2><ol>${objList}</ol></div>`;
+  }).join("")}
+  <div class="footer">تم الإنشاء بواسطة Video Goals Extractor</div>
+</div></body></html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "video-goals.html";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast("تم تنزيل ملف HTML");
+});
+
 applyTheme(localStorage.getItem(THEME_KEY) || "light");
 updateQuestionControls();
 renderHistory();

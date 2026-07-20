@@ -18,6 +18,9 @@ from app.models import (
     QuestionPreferences,
     SlideAnalysis,
     StudyQuestion,
+    VideoSegment,
+    VideoSegmentAnalysis,
+    VideoTechnicalTerm,
 )
 from app.services.documents import ExtractedDocument, ImagePayload, SlideSource
 
@@ -536,6 +539,120 @@ async def get_provider_chat(
             raise ProviderError("وصل رد غير مكتمل من DeepSeek.") from exc
 
     raise ProviderError(f"المحرك {provider_name} غير مدعوم للمساعد الذكي.")
+
+
+VIDEO_SEGMENT_PROMPT = """
+أنت مدرس جامعي ومحلل محتوى أكاديمي داخل Dr. Solution. سأعطيك صورة من مقطع فيديو تعليمي (سلايد أو شاشة عرض) مع النص اللي قاله الدكتور/المحاضر في هذا المقطع.
+
+المهمة: اشرح مقطع الفيديو هذا بناءً على الصورة والنص معاً.
+
+قواعد أساسية:
+- اشرح بالعربية الفصحى.
+- المصطلحات التقنية أو العلمية الإنجليزية (مثل Array, Loop, DNA, Algorithm) أبرزها بخط عريض (**مصطلح**) واكتب معناها بالعربي.
+- لا تترجم المصطلحات المتخصصة — اشرحها فقط.
+- لا تخلق معلومات غير موجودة في الصورة أو النص.
+- إذا النص بالإنجليزية، ترجم الشرح للعربية مع الحفاظ على المصطلحات.
+- إذا النص بالعربية، استخدمه مباشرة وأبرز المصطلحات الإنجليزية.
+
+أعد JSON فقط بهذا الشكل:
+{
+  "title": "عنوان واضح لهذا المقطع",
+  "arabic_explanation": "شرح تعليمي كامل للفكرة بناءً على الصورة والنص. اشرح المصطلحات، العلاقات، وكأنك تشرح لطالب.",
+  "translation": "إذا كان النص الأصلي بالإنجليزية، اكتب ترجمته العربية هنا. إذا كان النص عربي، اتركه فارغاً.",
+  "key_points": ["نقطة رئيسية 1", "نقطة رئيسية 2", "نقطة رئيسية 3"],
+  "technical_terms": [
+    {"term": "EnglishTerm", "arabic_equivalent": "المقابل العربي", "explanation": "شرح بسيط للمصطلح"}
+  ],
+  "segment_summary": "خلاصة 2-3 جمل لهذا المقطع"
+}
+لا تضع Markdown أو نص خارج JSON.
+""".strip()
+
+
+async def analyze_video_segment(
+    image_b64: str,
+    mime_type: str,
+    transcript: str,
+    model: str,
+    api_key: str,
+    settings: Settings,
+) -> dict:
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent"
+    )
+    prompt = f"صورة من مقطع فيديو تعليمي.\n\nالنص المقابل لهذا المقطع:\n{transcript}"
+    parts: list[dict] = [{"text": prompt}]
+    parts.append({"inlineData": {"mimeType": mime_type, "data": image_b64}})
+    parts.append({"text": VIDEO_SEGMENT_PROMPT})
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "temperature": 0.18,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+        },
+    }
+    headers = {"x-goog-api-key": api_key}
+    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+    _raise_for_provider_error(response, "Gemini")
+    try:
+        blocks = response.json()["candidates"][0]["content"]["parts"]
+        text = "\n".join(block.get("text", "") for block in blocks)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        raise ProviderError("وصل رد غير مكتمل من Gemini.") from exc
+    return _parse_json(text)
+
+
+VIDEO_SYNTHESIS_PROMPT = """
+أنت مدرس جامعي. لدي تحليل لمقاطع فيديو تعليمية متعددة. المطلوب: بناء خلاصة دراسية متكاملة للمادة كاملة.
+
+أعد JSON فقط بهذا الشكل:
+{
+  "overall_summary": "خلاصة عامة شاملة للمادة من 3-5 فقرات تغطي كل الأفكار الرئيسية",
+  "learning_objectives": ["هدف تعلم 1", "هدف تعلم 2", "هدف تعلم 3"],
+  "glossary": [
+    {"term": "EnglishTerm", "arabic_equivalent": "المقابل العربي", "explanation": "شرح المصطلح"}
+  ]
+}
+لا تضع Markdown أو نص خارج JSON.
+
+تحليل المقاطع:
+""".strip()
+
+
+async def synthesize_video(
+    segments: list[VideoSegmentAnalysis],
+    model: str,
+    api_key: str,
+    settings: Settings,
+) -> dict:
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent"
+    )
+    segments_text = "\n\n".join(
+        f"[مقطع {s.index}] {s.title}\n{s.segment_summary}"
+        for s in segments
+    )
+    prompt = VIDEO_SYNTHESIS_PROMPT + "\n" + segments_text
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.18,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+        },
+    }
+    headers = {"x-goog-api-key": api_key}
+    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+    _raise_for_provider_error(response, "Gemini")
+    try:
+        blocks = response.json()["candidates"][0]["content"]["parts"]
+        text = "\n".join(block.get("text", "") for block in blocks)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        raise ProviderError("وصل رد غير مكتمل من Gemini.") from exc
+    return _parse_json(text)
 
 
 async def _post_with_retry(

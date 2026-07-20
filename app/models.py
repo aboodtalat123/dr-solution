@@ -93,6 +93,50 @@ class ProviderInfo(BaseModel):
     key_url: str = ""
 
 
+class VideoSegment(BaseModel):
+    index: int
+    start_sec: float
+    end_sec: float
+    transcript_text: str
+
+
+class VideoTechnicalTerm(BaseModel):
+    term: str
+    arabic_equivalent: str = ""
+    explanation: str = ""
+
+
+class VideoSegmentAnalysis(BaseModel):
+    index: int
+    start_sec: float
+    end_sec: float
+    title: str = ""
+    arabic_explanation: str = ""
+    translation: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    technical_terms: list[VideoTechnicalTerm] = Field(default_factory=list)
+    segment_summary: str = ""
+    frame_data_url: str = ""
+
+
+class VideoAnalysisResult(BaseModel):
+    video_title: str = ""
+    duration_sec: float = 0
+    segments: list[VideoSegmentAnalysis] = Field(default_factory=list)
+    overall_summary: str = ""
+    learning_objectives: list[str] = Field(default_factory=list)
+    glossary: list[VideoTechnicalTerm] = Field(default_factory=list)
+
+
+class VideoAnalyzeRequest(BaseModel):
+    url: str
+    start: int | None = None
+    end: int | None = None
+    api_key: str = ""
+    provider: str = "gemini"
+    model: str = ""
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

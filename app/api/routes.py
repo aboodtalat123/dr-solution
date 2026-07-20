@@ -24,6 +24,8 @@ from app.models import (
 )
 from app.services.documents import DocumentError, DocumentExtractor
 from app.services.providers import LANGUAGES, ProviderError, get_provider, get_provider_chat
+from app.models import VideoAnalyzeRequest
+from app.services.video import process_video, process_video_deep
 
 
 class ChatMessage(BaseModel):
@@ -315,3 +317,58 @@ async def chat(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     return ChatResponse(answer=answer)
+
+
+class VideoExtractRequest(BaseModel):
+    url: str
+    second: int = 12
+    start: int | None = None
+    end: int | None = None
+    provider: str = "gemini"
+    api_key: str = ""
+    model: str = ""
+
+
+@router.post("/extract-video-goals")
+async def extract_video_goals(
+    body: VideoExtractRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    if not body.url.strip():
+        raise HTTPException(422, "رابط الفيديو مطلوب")
+    second = max(1, min(body.second, 300))
+    try:
+        result = await process_video(
+            url=body.url.strip(),
+            second=second,
+            start=body.start,
+            end=body.end,
+            provider=body.provider.lower(),
+            model=body.model,
+            api_key=body.api_key.strip(),
+            settings=settings,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return result
+
+
+@router.post("/analyze-video")
+async def analyze_video(
+    body: VideoAnalyzeRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    if not body.url.strip():
+        raise HTTPException(422, "رابط الفيديو مطلوب")
+    try:
+        results = await process_video_deep(
+            url=body.url.strip(),
+            start=body.start,
+            end=body.end,
+            api_key=body.api_key.strip(),
+            model=body.model,
+            settings=settings,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return {"results": results, "total": len(results)}
