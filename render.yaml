@@ -13,11 +13,21 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: APP_VERSION
-        value: 3.2.0
+        value: 3.5.0
       - key: REQUIRE_USER_API_KEY
         value: true
       - key: GEMINI_MODEL
         value: gemini-3.1-flash-lite
+      - key: GEMINI_RPM
+        value: 30
+      - key: GEMINI_RPD
+        value: 1500
+      - key: MAX_PAGES
+        value: 500
+      - key: MAX_UPLOAD_MB
+        value: 50
+      - key: ANALYSIS_BATCH_SIZE
+        value: 4
       - key: VIDEO_MAX_SEGMENTS
         value: 12
       - key: VIDEO_MAX_PLAYLIST_ITEMS
