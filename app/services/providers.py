@@ -263,8 +263,30 @@ class AIProvider(ABC):
         )
         try:
             synthesis = ChapterSynthesis.model_validate(synthesis_raw)
-        except ValidationError as exc:
-            raise ProviderError("تم شرح السلايدات لكن تعذر بناء خلاصة الشابتر. أعد المحاولة.") from exc
+        except (ValidationError, ProviderJSONError) as exc:
+            if not preferences.enabled:
+                raise ProviderError(
+                    "تم شرح السلايدات لكن تعذر بناء خلاصة الشابتر. أعد المحاولة."
+                ) from exc
+            # التركيبة النهائية كبيرة وتتكسر أحياناً. إن فشل التوليد مع
+            # الأسئلة نعيد المحاولة بدونها — فهذا لا يخسر الشابتر كله.
+            fallback_prefs = QuestionPreferences(
+                enabled=False,
+                types=preferences.types,
+                count=preferences.count,
+                difficulty=preferences.difficulty,
+            )
+            fallback_raw = await self._request_json(
+                self._synthesis_prompt(
+                    document.filename,
+                    slides,
+                    target_language,
+                    fallback_prefs,
+                    content_kind,
+                ),
+                [],
+            )
+            synthesis = ChapterSynthesis.model_validate(fallback_raw)
 
         allowed_types = set(preferences.types)
         questions = (
