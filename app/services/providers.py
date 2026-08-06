@@ -173,7 +173,7 @@ class AIProvider(ABC):
         total_slides = len(document.slides)
         semaphore = asyncio.Semaphore(2)
 
-        async def _request_group(self, slides: list[SlideSource]) -> dict:
+        async def _request_group(slides: list[SlideSource]) -> dict:
             """Call the provider once for the given group of slides."""
             async with semaphore:
                 return await self._request_json(
@@ -196,7 +196,7 @@ class AIProvider(ABC):
             """Analyse a group, halving on error; a single stubborn slide is retried
             and then gracefully kept with extracted text instead of failing the chapter."""
             try:
-                raw = await self._request_group(slides)
+                raw = await _request_group(slides)
                 return SlideBatch.model_validate(raw)
             except Exception as exc:
                 if isinstance(exc, (ProviderJSONError, ValidationError)) and len(slides) > 1:
@@ -209,11 +209,11 @@ class AIProvider(ABC):
                     # Retry the lone slide a few times before accepting fallback.
                     for _ in range(max(1, self.settings.request_retry_attempts)):
                         try:
-                            raw = await self._request_group(slides)
+                            raw = await _request_group(slides)
                             return SlideBatch.model_validate(raw)
                         except (ProviderJSONError, ValidationError):
                             continue
-                    fallback = await _fallback_slide(slide, "لم يستجب المحرك بشكل صحيح")
+                    fallback = await _fallback_slide(slide, "لم يستجيب المحرك بشكل صحيح")
                     return SlideBatch(slides=[fallback])
                 raise
 
