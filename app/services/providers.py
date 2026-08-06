@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from abc import ABC, abstractmethod
 from collections import deque
@@ -119,6 +120,14 @@ def get_rate_limiter(name: str, requests_per_minute: int, requests_per_day: int 
     return limiter
 
 
+class ProviderJSONError(ProviderError):
+    """Raised when a provider returns malformed/truncated JSON.
+
+    Used internally to trigger batch-splitting recovery so a single bad reply
+    does not abort the whole chapter analysis.
+    """
+
+
 class SlideBatch(BaseModel):
     slides: list[SlideAnalysis] = Field(default_factory=list)
 
@@ -164,16 +173,31 @@ class AIProvider(ABC):
         total_slides = len(document.slides)
         semaphore = asyncio.Semaphore(2)
 
-        async def analyze_batch(slides: list[SlideSource]) -> SlideBatch:
-            async with semaphore:
-                raw = await self._request_json(
-                    self._slide_prompt(document.filename, slides, target_language, depth, content_kind),
-                    [slide.preview for slide in slides] if self.supports_vision else [],
-                )
+        async def _analyze_group(slides: list[SlideSource]) -> SlideBatch:
+            """Analyse a group, splitting in half on JSON error until success.
+
+            A single malformed/truncated reply no longer aborts the whole
+            chapter: we retry the failing group with fewer slides each time.
+            """
             try:
+                async with semaphore:
+                    raw = await self._request_json(
+                        self._slide_prompt(document.filename, slides, target_language, depth, content_kind),
+                        [slide.preview for slide in slides] if self.supports_vision else [],
+                    )
                 return SlideBatch.model_validate(raw)
-            except ValidationError as exc:
-                raise ProviderError("تعذر تنظيم شرح إحدى مجموعات السلايدات. أعد المحاولة.") from exc
+            except Exception as exc:
+                if isinstance(exc, (ProviderJSONError, ValidationError)) and len(slides) > 1:
+                    mid = len(slides) // 2
+                    left = await _analyze_group(slides[:mid])
+                    right = await _analyze_group(slides[mid:])
+                    return SlideBatch(slides=left.slides + right.slides)
+                if isinstance(exc, (ProviderJSONError, ValidationError)):
+                    raise ProviderError("تعذر تنظيم شرح بعض السلايدات حتى بعد المحاولة. أعد المحاولة.") from exc
+                raise
+
+        async def analyze_batch(slides: list[SlideSource]) -> SlideBatch:
+            return await _analyze_group(slides)
 
         analyzed_batches: list[SlideBatch] = []
         done_slides = 0
@@ -778,6 +802,53 @@ def _retry_after_seconds(response: httpx.Response) -> float:
     return 3.0
 
 
+def _repair_json(cleaned: str) -> str:
+    """Best-effort repair of truncated JSON: closes open braces/brackets/quotes
+    and drops trailing garbage so Gemini's cut-off replies can still be parsed."""
+    cleaned = cleaned.strip()
+    if not cleaned:
+        return cleaned
+
+    # 1) Drop trailing commas inside objects/arrays, e.g. `"a": 1,,}`
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+    # 2) Balance quotes, braces and brackets by scanning the string.
+    stack: list[str] = []
+    in_string = False
+    i = 0
+    n = len(cleaned)
+    while i < n:
+        ch = cleaned[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack and stack[-1] == ("{" if ch == "}" else "["):
+                stack.pop()
+        i += 1
+
+    # Unterminated string at the very end -> close it.
+    if in_string:
+        cleaned += '"'
+
+    # Close any unclosed quotes/brackets, reverse order.
+    for opener in reversed(stack):
+        cleaned += "}" if opener == "{" else "]"
+
+    # Drop trailing commas left before the closers we just added.
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+    return cleaned
+
+
 def _parse_json(raw: str) -> dict:
     cleaned = raw.strip()
     if cleaned.startswith("```"):
@@ -790,10 +861,15 @@ def _parse_json(raw: str) -> dict:
             cleaned = cleaned[start : end + 1]
     try:
         payload = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ProviderError("وصلت نتيجة غير منظمة من المحرك. أعد المحاولة.") from exc
+    except json.JSONDecodeError:
+        # The provider often truncates long replies mid-object: try repairing.
+        repaired = _repair_json(cleaned)
+        try:
+            payload = json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            raise ProviderJSONError("وصلت نتيجة غير منظمة من المحرك. أعد المحاولة.") from exc
     if not isinstance(payload, dict):
-        raise ProviderError("وصلت نتيجة غير متوقعة من المحرك. أعد المحاولة.")
+        raise ProviderJSONError("وصلت نتيجة غير متوقعة من المحرك. أعد المحاولة.")
     return payload
 
 
