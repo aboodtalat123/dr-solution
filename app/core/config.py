@@ -49,6 +49,12 @@ class Settings:
     max_pages: int = _as_int("MAX_PAGES", 200)
     analysis_batch_size: int = _as_int("ANALYSIS_BATCH_SIZE", 4)
     request_timeout_seconds: int = _as_int("REQUEST_TIMEOUT_SECONDS", 180)
+    request_retry_attempts: int = _as_int("REQUEST_RETRY_ATTEMPTS", 3)
+
+    gemini_rpm: int = _as_int("GEMINI_RPM", 30)
+    gemini_rpd: int = _as_int("GEMINI_RPD", 1500)
+    claude_rpm: int = _as_int("CLAUDE_RPM", 40)
+    deepseek_rpm: int = _as_int("DEEPSEEK_RPM", 60)
 
     video_max_duration_seconds: int = _as_int("VIDEO_MAX_DURATION_SECONDS", 7200)
     video_max_playlist_items: int = _as_int("VIDEO_MAX_PLAYLIST_ITEMS", 3)

@@ -786,7 +786,10 @@ function formatDate(value) {
 function newAnalysis() {
   clearFile();
   state.result = null;
-  showView(elements.workspaceView);
+  videoState.result = null;
+  if (videoEls.resultsSection) videoEls.resultsSection.classList.remove("is-active");
+  if (videoEls.section) videoEls.form.reset();
+  switchMode("file");
   setNavigation("workspace");
 }
 
@@ -960,8 +963,13 @@ elements.exportSwatches.addEventListener("click", (event) => {
 elements.navItems.forEach((item) => {
   item.addEventListener("click", () => {
     setNavigation(item.dataset.view);
-    showView(item.dataset.view === "history" ? elements.historyView : elements.workspaceView);
-    if (item.dataset.view === "history") renderHistory();
+    if (item.dataset.view === "history") {
+      showView(elements.historyView);
+      renderHistory();
+    } else {
+      elements.historyView.classList.remove("is-active");
+      switchMode(currentMode);
+    }
   });
 });
 
@@ -997,7 +1005,9 @@ function switchMode(mode) {
   videoEls.modeTabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.mode === mode));
   elements.workspaceView.classList.toggle("is-active", mode === "file");
   if (videoEls.section) videoEls.section.classList.toggle("is-active", mode === "video");
+  elements.processingView.classList.remove("is-active");
   elements.resultsView.classList.remove("is-active");
+  elements.historyView.classList.remove("is-active");
   if (videoEls.resultsSection) videoEls.resultsSection.classList.remove("is-active");
 }
 
@@ -1112,7 +1122,7 @@ videoEls.form.addEventListener("submit", async (event) => {
   }
   videoEls.extractBtn.disabled = true;
   videoEls.status.textContent = "جارٍ تنزيل الفيديو وتحليل السلايدات...";
-  elements.processingView.classList.add("is-active");
+  showView(elements.processingView);
   videoEls.section.classList.remove("is-active");
   startProgress();
 
@@ -1139,7 +1149,6 @@ videoEls.form.addEventListener("submit", async (event) => {
     const data = await resp.json();
     videoState.result = data;
     stopProgress(true);
-    elements.processingView.classList.remove("is-active");
     renderVideoResults(data);
     const totalSegments = (data.results || []).reduce((sum, item) => sum + (item.segments || []).length, 0);
     videoEls.apiKey.value = "";
@@ -1156,9 +1165,18 @@ videoEls.form.addEventListener("submit", async (event) => {
   }
 });
 
+function updateVideoButton() {
+  const url = videoEls.form.querySelector('[name="url"]').value.trim();
+  const key = videoEls.apiKey.value.trim();
+  videoEls.extractBtn.disabled = !url || !key;
+}
+
+videoEls.form.querySelector('[name="url"]').addEventListener("input", updateVideoButton);
+videoEls.apiKey.addEventListener("input", updateVideoButton);
+updateVideoButton();
+
 videoEls.backBtn.addEventListener("click", () => {
-  if (videoEls.resultsSection) videoEls.resultsSection.classList.remove("is-active");
-  if (videoEls.section) videoEls.section.classList.add("is-active");
+  switchMode("video");
   closeSidebar();
   window.scrollTo({ top: 0, behavior: "smooth" });
   setNavigation("workspace");

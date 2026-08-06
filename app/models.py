@@ -120,6 +120,14 @@ class VideoSegmentAnalysis(BaseModel):
     frame_data_url: str = ""
 
 
+class StudyPlanItem(BaseModel):
+    order: int = 0
+    title: str = ""
+    duration_minutes: int = 0
+    bloom_level: str = ""
+    prerequisites: list[str] = Field(default_factory=list)
+
+
 class VideoAnalysisResult(BaseModel):
     video_title: str = ""
     duration_sec: float = 0
@@ -130,6 +138,7 @@ class VideoAnalysisResult(BaseModel):
     overall_summary: str = ""
     learning_objectives: list[str] = Field(default_factory=list)
     glossary: list[VideoTechnicalTerm] = Field(default_factory=list)
+    study_plan: list[StudyPlanItem] = Field(default_factory=list)
 
 
 class VideoAnalyzeRequest(BaseModel):

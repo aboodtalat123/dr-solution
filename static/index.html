@@ -130,6 +130,15 @@
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
       <main class="main">
+        <div class="mode-tabs" role="tablist" aria-label="طريقة التحليل">
+          <button class="mode-tab is-active" type="button" data-mode="file" role="tab" aria-selected="true">
+            <i data-lucide="file-text"></i><span>ملف PDF أو صورة</span>
+          </button>
+          <button class="mode-tab" type="button" data-mode="video" role="tab" aria-selected="false">
+            <i data-lucide="video"></i><span>شرح فيديو YouTube</span>
+          </button>
+        </div>
+
         <section class="workspace view is-active" id="workspaceView">
           <div class="workspace__header">
             <div>
@@ -142,15 +151,6 @@
               <span>JPG</span>
               <span>WEBP</span>
             </div>
-          </div>
-
-          <div class="mode-tabs" role="tablist" aria-label="طريقة التحليل">
-            <button class="mode-tab is-active" type="button" data-mode="file" role="tab" aria-selected="true">
-              <i data-lucide="file-text"></i><span>ملف PDF أو صورة</span>
-            </button>
-            <button class="mode-tab" type="button" data-mode="video" role="tab" aria-selected="false">
-              <i data-lucide="video"></i><span>شرح فيديو YouTube</span>
-            </button>
           </div>
 
           <form class="analysis-form" id="analysisForm">
@@ -367,7 +367,7 @@
           </form>
         </section>
 
-        <section class="video-section view" id="videoSection">
+        <section class="video-section" id="videoSection">
           <div class="workspace__header">
             <div>
               <span class="eyebrow">تحليل المحاضرات المرئية</span>
@@ -422,7 +422,7 @@
           </form>
         </section>
 
-        <section class="video-results-section view" id="videoResultsSection">
+        <section class="video-results-section" id="videoResultsSection">
           <header class="results__header">
             <div class="results__title">
               <button class="icon-button" id="videoBackButton" type="button" aria-label="العودة" title="تحليل جديد">

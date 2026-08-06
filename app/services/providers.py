@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass
 
 import httpx
@@ -62,6 +64,59 @@ class ProviderError(RuntimeError):
 
 class ProviderNotConfigured(ProviderError):
     pass
+
+
+class RequestRateLimiter:
+    """Rate limiter with rolling minute (RPM) and rolling day (RPD) windows.
+
+    Waits (sleeps) until the oldest request falls outside the window before
+    allowing the next call, so requests pause and resume automatically when a
+    new minute/day starts — the process never fails on 429 rate limits.
+    """
+
+    def __init__(self, requests_per_minute: int, requests_per_day: int = 0) -> None:
+        self._rpm = max(1, int(requests_per_minute))
+        self._rpd = max(0, int(requests_per_day))
+        self._minute_lock = asyncio.Lock()
+        self._day_lock = asyncio.Lock()
+        self._minute_stamps: deque[float] = deque()
+        self._day_stamps: deque[float] = deque()
+
+    async def acquire(self) -> None:
+        while True:
+            # 1) Rolling minute window (RPM)
+            async with self._minute_lock:
+                now = time.monotonic()
+                while self._minute_stamps and now - self._minute_stamps[0] >= 60.0:
+                    self._minute_stamps.popleft()
+                if len(self._minute_stamps) >= self._rpm:
+                    await asyncio.sleep(60.0 - (now - self._minute_stamps[0]) + 0.05)
+                    continue
+                self._minute_stamps.append(now)
+
+            # 2) Rolling day window (RPD) — only when a daily cap is configured
+            if self._rpd > 0:
+                async with self._day_lock:
+                    now = time.monotonic()
+                    while self._day_stamps and now - self._day_stamps[0] >= 86400.0:
+                        self._day_stamps.popleft()
+                    if len(self._day_stamps) >= self._rpd:
+                        raise ProviderError(
+                            f"وصلت للحد اليومي المسموح ({self._rpd} طلب). جرّب غداً أو استخدم مفتاحاً مدفوعاً."
+                        )
+                    self._day_stamps.append(now)
+            return
+
+
+_limiters: dict[str, RequestRateLimiter] = {}
+
+
+def get_rate_limiter(name: str, requests_per_minute: int, requests_per_day: int = 0) -> RequestRateLimiter:
+    limiter = _limiters.get(name)
+    if limiter is None:
+        limiter = RequestRateLimiter(requests_per_minute, requests_per_day)
+        _limiters[name] = limiter
+    return limiter
 
 
 class SlideBatch(BaseModel):
@@ -336,7 +391,8 @@ class GeminiProvider(AIProvider):
             },
         }
         headers = {"x-goog-api-key": api_key}
-        response = await _post_with_retry(url, headers, payload, self.settings.request_timeout_seconds)
+        await get_rate_limiter("gemini", self.settings.gemini_rpm, self.settings.gemini_rpd).acquire()
+        response = await _post_with_retry(url, headers, payload, self.settings.request_timeout_seconds, self.settings.request_retry_attempts)
         _raise_for_provider_error(response, "Gemini")
 
         try:
@@ -383,11 +439,13 @@ class ClaudeProvider(AIProvider):
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
+        await get_rate_limiter("claude", self.settings.claude_rpm).acquire()
         response = await _post_with_retry(
             "https://api.anthropic.com/v1/messages",
             headers,
             payload,
             self.settings.request_timeout_seconds,
+            self.settings.request_retry_attempts,
         )
         _raise_for_provider_error(response, "Claude")
         try:
@@ -423,11 +481,13 @@ class DeepSeekProvider(AIProvider):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        await get_rate_limiter("deepseek", self.settings.deepseek_rpm).acquire()
         response = await _post_with_retry(
             "https://api.deepseek.com/chat/completions",
             headers,
             payload,
             self.settings.request_timeout_seconds,
+            self.settings.request_retry_attempts,
         )
         _raise_for_provider_error(response, "DeepSeek")
         try:
@@ -508,7 +568,8 @@ async def get_provider_chat(
             "generationConfig": {"temperature": 0.35, "maxOutputTokens": 2048},
         }
         headers = {"x-goog-api-key": api_key}
-        response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+        await get_rate_limiter("gemini", settings.gemini_rpm, settings.gemini_rpd).acquire()
+        response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds, settings.request_retry_attempts)
         _raise_for_provider_error(response, "Gemini")
         try:
             blocks = response.json()["candidates"][0]["content"]["parts"]
@@ -531,7 +592,8 @@ async def get_provider_chat(
             "max_tokens": 2048,
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+        await get_rate_limiter("deepseek", settings.deepseek_rpm).acquire()
+        response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds, settings.request_retry_attempts)
         _raise_for_provider_error(response, "DeepSeek")
         try:
             return response.json()["choices"][0]["message"]["content"]
@@ -576,14 +638,16 @@ async def analyze_video_segment(
     model: str,
     api_key: str,
     settings: Settings,
+    no_image: bool = False,
 ) -> dict:
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"{model}:generateContent"
     )
-    prompt = f"صورة من مقطع فيديو تعليمي.\n\nالنص المقابل لهذا المقطع:\n{transcript}"
+    prompt = f"النص المقابل لهذا المقطع:\n{transcript}"
     parts: list[dict] = [{"text": prompt}]
-    parts.append({"inlineData": {"mimeType": mime_type, "data": image_b64}})
+    if image_b64 and not no_image:
+        parts.append({"inlineData": {"mimeType": mime_type, "data": image_b64}})
     parts.append({"text": VIDEO_SEGMENT_PROMPT})
     payload = {
         "contents": [{"role": "user", "parts": parts}],
@@ -594,7 +658,8 @@ async def analyze_video_segment(
         },
     }
     headers = {"x-goog-api-key": api_key}
-    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+    await get_rate_limiter("gemini", settings.gemini_rpm, settings.gemini_rpd).acquire()
+    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds, settings.request_retry_attempts)
     _raise_for_provider_error(response, "Gemini")
     try:
         blocks = response.json()["candidates"][0]["content"]["parts"]
@@ -613,9 +678,23 @@ VIDEO_SYNTHESIS_PROMPT = """
   "learning_objectives": ["هدف تعلم 1", "هدف تعلم 2", "هدف تعلم 3"],
   "glossary": [
     {"term": "EnglishTerm", "arabic_equivalent": "المقابل العربي", "explanation": "شرح المصطلح"}
+  ],
+  "study_plan": [
+    {
+      "order": 1,
+      "title": "عنوان الهدف/الموضوع",
+      "duration_minutes": 15,
+      "bloom_level": "تذكر/فهم/تطبيق/تحليل/تقييم/إبداع",
+      "prerequisites": ["معرفة سابقة 1", "معرفة سابقة 2"]
+    }
   ]
 }
-لا تضع Markdown أو نص خارج JSON.
+قواعد study_plan:
+- رتب الأهداف بتسلسل منطقي (من الأساسي للمتقدم).
+- bloom_level: حدد مستوى بلوم لكل هدف (تذكر، فهم، تطبيق، تحليل، تقييم، إبداع).
+- prerequisites: أي معرفة مسبقة يحتاجها الطالب قبل هذا الهدف.
+- duration_minutes: كم دقيقة تقديرياً يحتاج الطالب لدراسة هذا الهدف.
+- لا تضع Markdown أو نص خارج JSON.
 
 تحليل المقاطع:
 """.strip()
@@ -645,7 +724,8 @@ async def synthesize_video(
         },
     }
     headers = {"x-goog-api-key": api_key}
-    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds)
+    await get_rate_limiter("gemini", settings.gemini_rpm, settings.gemini_rpd).acquire()
+    response = await _post_with_retry(url, headers, payload, settings.request_timeout_seconds, settings.request_retry_attempts)
     _raise_for_provider_error(response, "Gemini")
     try:
         blocks = response.json()["candidates"][0]["content"]["parts"]
@@ -660,24 +740,42 @@ async def _post_with_retry(
     headers: dict[str, str],
     payload: dict,
     timeout_seconds: int,
+    retries: int = 2,
 ) -> httpx.Response:
     last_response: httpx.Response | None = None
     async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-        for attempt in range(2):
+        for attempt in range(max(1, retries)):
             try:
                 response = await client.post(url, headers=headers, json=payload)
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                if attempt == 1:
+                if attempt == max(1, retries) - 1:
                     raise ProviderError("انقطع الاتصال بخدمة الذكاء الاصطناعي. أعد المحاولة.") from exc
-                await asyncio.sleep(1.2)
+                await asyncio.sleep(1.2 * (attempt + 1))
                 continue
             last_response = response
+
+            if response.status_code == 429:
+                if attempt == max(1, retries) - 1:
+                    return response
+                await asyncio.sleep(_retry_after_seconds(response))
+                continue
             if response.status_code < 500:
                 return response
-            if attempt == 0:
-                await asyncio.sleep(1.2)
+            if attempt == max(1, retries) - 1:
+                return response
+            await asyncio.sleep(1.2 * (attempt + 1))
         return last_response
     raise ProviderError("تعذر الاتصال بخدمة الذكاء الاصطناعي.")
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    header = response.headers.get("Retry-After", "")
+    if header:
+        try:
+            return max(1.0, float(header))
+        except ValueError:
+            pass
+    return 3.0
 
 
 def _parse_json(raw: str) -> dict:

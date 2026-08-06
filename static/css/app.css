@@ -76,10 +76,12 @@
 
 /* â”€â”€ Video Section â”€â”€ */
 .video-section {
+  display: none;
   max-width: 960px;
   margin: 0 auto;
   padding: 24px;
 }
+.video-section.is-active { display: block; }
 
 .video-section .workspace__header { margin-bottom: 24px; }
 .video-form {
@@ -112,10 +114,13 @@
   text-align: left;
 }
 .video-results-section {
+  display: none;
   padding: 24px;
   max-width: 1000px;
   margin: 0 auto;
 }
+.video-results-section.is-active { display: block; }
+
 
 
 /* â”€â”€ Video Goals Cards â”€â”€ */
