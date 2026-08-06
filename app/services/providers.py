@@ -168,32 +168,53 @@ class AIProvider(ABC):
         if not self.supports_vision and not document.text:
             raise ProviderError("هذا المحرك يحتاج نصاً قابلاً للنسخ. استخدم Gemini أو Claude للملفات المصوّرة.")
 
-        batch_size = max(1, min(self.settings.analysis_batch_size, 2))
+        batch_size = max(1, min(self.settings.analysis_batch_size, 4))
         batches = [document.slides[index : index + batch_size] for index in range(0, len(document.slides), batch_size)]
         total_slides = len(document.slides)
         semaphore = asyncio.Semaphore(2)
 
-        async def _analyze_group(slides: list[SlideSource]) -> SlideBatch:
-            """Analyse a group, splitting in half on JSON error until success.
+        async def _request_group(self, slides: list[SlideSource]) -> dict:
+            """Call the provider once for the given group of slides."""
+            async with semaphore:
+                return await self._request_json(
+                    self._slide_prompt(document.filename, slides, target_language, depth, content_kind),
+                    [slide.preview for slide in slides] if self.supports_vision else [],
+                )
 
-            A single malformed/truncated reply no longer aborts the whole
-            chapter: we retry the failing group with fewer slides each time.
-            """
+        async def _fallback_slide(slide: SlideSource, reason: str) -> SlideAnalysis:
+            """Graceful slide fallback so one stubborn page never drops the chapter."""
+            return SlideAnalysis(
+                page_number=slide.page_number,
+                title=f"السلايد {slide.page_number}",
+                explanation=slide.text or f"تعذر تحليل هذه الصفحة (${reason}).",
+                slide_summary=(slide.text[:320]).strip(),
+                original_text=slide.text,
+                key_points=[reason] if reason else [],
+            )
+
+        async def _analyze_group(slides: list[SlideSource], depth_level: int = 0) -> SlideBatch:
+            """Analyse a group, halving on error; a single stubborn slide is retried
+            and then gracefully kept with extracted text instead of failing the chapter."""
             try:
-                async with semaphore:
-                    raw = await self._request_json(
-                        self._slide_prompt(document.filename, slides, target_language, depth, content_kind),
-                        [slide.preview for slide in slides] if self.supports_vision else [],
-                    )
+                raw = await self._request_group(slides)
                 return SlideBatch.model_validate(raw)
             except Exception as exc:
                 if isinstance(exc, (ProviderJSONError, ValidationError)) and len(slides) > 1:
                     mid = len(slides) // 2
-                    left = await _analyze_group(slides[:mid])
-                    right = await _analyze_group(slides[mid:])
+                    left = await _analyze_group(slides[:mid], depth_level + 1)
+                    right = await _analyze_group(slides[mid:], depth_level + 1)
                     return SlideBatch(slides=left.slides + right.slides)
-                if isinstance(exc, (ProviderJSONError, ValidationError)):
-                    raise ProviderError("تعذر تنظيم شرح بعض السلايدات حتى بعد المحاولة. أعد المحاولة.") from exc
+                if isinstance(exc, (ProviderJSONError, ValidationError)) and len(slides) == 1:
+                    slide = slides[0]
+                    # Retry the lone slide a few times before accepting fallback.
+                    for _ in range(max(1, self.settings.request_retry_attempts)):
+                        try:
+                            raw = await self._request_group(slides)
+                            return SlideBatch.model_validate(raw)
+                        except (ProviderJSONError, ValidationError):
+                            continue
+                    fallback = await _fallback_slide(slide, "لم يستجب المحرك بشكل صحيح")
+                    return SlideBatch(slides=[fallback])
                 raise
 
         async def analyze_batch(slides: list[SlideSource]) -> SlideBatch:

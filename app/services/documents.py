@@ -113,6 +113,18 @@ class DocumentExtractor:
                 raise DocumentError("ملف PDF لا يحتوي على صفحات.")
 
             slide_count = min(len(document), self.max_pages)
+
+            # Adaptive preview resolution so total memory stays bounded even for
+            # very large chapters (Render free = 512MB RAM). Fewer/more pages →
+            # lower zoom + quality keeps the sum of all previews roughly constant.
+            total_doc_pages = len(document)
+            if total_doc_pages <= 150:
+                zoom, quality = 1.35, 74
+            elif total_doc_pages <= 300:
+                zoom, quality = 1.05, 68
+            else:
+                zoom, quality = 0.85, 62
+
             remaining_text = self.max_text_chars
             slides: list[SlideSource] = []
             discovered_images = 0
@@ -128,9 +140,9 @@ class DocumentExtractor:
 
                 image_count = len(page.get_images(full=True))
                 discovered_images += image_count
-                pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
                 preview = ImagePayload(
-                    pixmap.tobytes("jpeg", jpg_quality=74),
+                    pixmap.tobytes("jpeg", jpg_quality=quality),
                     "image/jpeg",
                     f"السلايد {page_index + 1}",
                 )

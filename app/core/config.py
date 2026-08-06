@@ -43,10 +43,10 @@ class Settings:
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "").strip()
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
 
-    max_upload_mb: int = _as_int("MAX_UPLOAD_MB", 15)
+    max_upload_mb: int = _as_int("MAX_UPLOAD_MB", 50)
     max_text_chars: int = _as_int("MAX_TEXT_CHARS", 600_000)
     max_images: int = _as_int("MAX_IMAGES", 200)
-    max_pages: int = _as_int("MAX_PAGES", 200)
+    max_pages: int = _as_int("MAX_PAGES", 500)
     analysis_batch_size: int = _as_int("ANALYSIS_BATCH_SIZE", 4)
     request_timeout_seconds: int = _as_int("REQUEST_TIMEOUT_SECONDS", 180)
     request_retry_attempts: int = _as_int("REQUEST_RETRY_ATTEMPTS", 3)
